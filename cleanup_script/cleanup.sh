@@ -1,27 +1,60 @@
 #!/bin/bash
 
 
+workloads=("interactiveworkloads" "trainingworkloads" "distributedworkloads" "inferenceworkloads")
+resources=("project" "accessrule" "nodepools")
+
+
 green() {
   echo -e "\033[32m$1\033[0m"
 }
 
+function remove_workload_finalizer() {
+  for workload in "${workloads[@]}"; do
+      echo "Processing: ${workload}"
+      kubectl get ${workload} -A | awk 'NR>1 {print $1, $2}' | while read namespace resource_name; do
+          kubectl -n "$namespace" patch ${workload} "$resource_name" -p '{"metadata":{"finalizers":[]}}' --type=merge
+      done
+  done
+}
+
+
+function remove_resource_finalizer() {
+  for resource in "${resources[@]}"; do
+      echo "Processing: ${resource}"
+      kubectl get ${resource} -A | awk 'NR>1 {print $1}' | xargs kubectl patch $1 ${resource} -p '{"metadata":{"finalizers":[]}}' --type=merge
+  done
+}
+
 
 function cleanup_cluster() {
-  green "Cleaning up the Run:ai cluster..."
+  green "Cleaning up the Run:ai cluster"
+
+  green "Performing helm delete on the runai-cluster"
+  helm delete runai-cluster -n runai
+
+  green "Deleting the validatingwebhookconfigurations..."
+  kubectl get validatingwebhookconfiguration | grep runai | awk 'NR>1 {print $1}' | xargs kubectl delete validatingwebhookconfiguration $1
+  kubectl get mutatingwebhookconfiguration | grep runai | awk 'NR>1 {print $1}' | xargs kubectl delete mutatingwebhookconfiguration $1
+
+  green "Removing workload finalizers..."
+  remove_workload_finalizer
+
+  green "Removing resource finalizers..."
+  remove_resource_finalizer
 
   green "Deleteing projects and workloads..."
   kubectl get projects | awk 'NR>1 {print $1}' | xargs kubectl delete projects $1
   kubectl get interactiveworkloads -A | awk 'NR>1 {print $1}' | xargs kubectl delete interactiveworkloads $1
   kubectl get trainingworkloads -A | awk 'NR>1 {print $1}' | xargs kubectl delete trainingworkloads $1
+  kubectl get distributedworkloads -A | awk 'NR>1 {print $1}' | xargs kubectl delete distributedworkloads $1
+  kubectl get inferenceworkloads -A | awk 'NR>1 {print $1}' | xargs kubectl delete inferenceworkloads $1
+
 
   green "Deleting the Run:ai configuration"
   kubectl delete runaiconfig runai -n runai
 
   green "Cleaning up any extra resources"
-  kubectl get accessrules | awk 'NR>1 {print $1}' | xargs kubectl delete accessrules $1
-
-  green "Performing helm delete on the runai-cluster"
-  helm delete runai-cluster -n runai
 
   green "Deleting the runai namespace"
   kubectl delete ns runai
@@ -29,7 +62,6 @@ function cleanup_cluster() {
   green "Deleting the Run:ai cluster CRDs"
   kubectl get crd | grep run.ai | awk 'NR>1 {print $1}' | xargs kubectl delete crds $1
   kubectl get crd | grep run.ai | awk '{print $1}' | xargs kubectl delete crds $1
-  kubectl get validatingwebhookconfiguration | grep runai | awk 'NR>1 {print $1}' | xargs kubectl delete validatingwebhookconfiguration $1
 }
 
 
@@ -65,5 +97,3 @@ if [ "$1" == "backend" ]; then
 else
   echo "Usage: ./cleanup.sh backend"
 fi
-
-
