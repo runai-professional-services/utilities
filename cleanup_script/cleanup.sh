@@ -1,8 +1,9 @@
 #!/bin/bash
 
 
-workloads=("interactiveworkloads" "trainingworkloads" "distributedworkloads" "inferenceworkloads")
-resources=("project" "accessrule" "nodepools")
+workloads=("interactiveworkloads" "trainingworkloads" "distributedworkloads" "inferenceworkloads" "externalworkloads")
+resources=("project" "accessrule" "nodepools" "runaiconfig")
+TIMEOUT="30"
 
 
 green() {
@@ -31,11 +32,11 @@ function cleanup_cluster() {
   green "Cleaning up the Run:ai cluster"
 
   green "Performing helm delete on the runai-cluster"
-  helm delete runai-cluster -n runai
+  kubectl delete runai-cluster -n runai
 
   green "Deleting the validatingwebhookconfigurations..."
-  kubectl get validatingwebhookconfiguration | grep runai | awk 'NR>1 {print $1}' | xargs kubectl delete validatingwebhookconfiguration $1
-  kubectl get mutatingwebhookconfiguration | grep runai | awk 'NR>1 {print $1}' | xargs kubectl delete mutatingwebhookconfiguration $1
+  kubectl get validatingwebhookconfiguration | grep runai | awk '{print $1}' | xargs kubectl delete validatingwebhookconfiguration $1
+  kubectl get mutatingwebhookconfiguration | grep runai | awk '{print $1}' | xargs kubectl delete mutatingwebhookconfiguration $1
 
   green "Removing workload finalizers..."
   remove_workload_finalizer
@@ -60,8 +61,8 @@ function cleanup_cluster() {
   kubectl delete ns runai
 
   green "Deleting the Run:ai cluster CRDs"
-  kubectl get crd | grep run.ai | awk 'NR>1 {print $1}' | xargs kubectl delete crds $1
-  kubectl get crd | grep run.ai | awk '{print $1}' | xargs kubectl delete crds $1
+  kubectl get crd | grep run.ai | awk 'NR>1 {print $1}' | xargs kubectl delete crds $1 --timeout=${TIMEOUT}s --ignore-not-found
+  kubectl get crd | grep run.ai | awk '{print $1}' | xargs kubectl delete crds $1 --timeout=${TIMEOUT}s --ignore-not-found
 }
 
 
@@ -79,7 +80,7 @@ function cleanup_backend() {
   kubectl delete ns runai-backend
 
   green "Deleting all Run:ai related namespaces"
-  kubectl get ns | grep runai | awk 'NR>1 {print $1}' |  xargs kubectl delete ns $1
+  kubectl get ns | grep runai | awk '{print $1}' |  xargs kubectl delete ns $1
 }
 
 
