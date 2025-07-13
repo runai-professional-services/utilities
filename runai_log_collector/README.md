@@ -1,10 +1,23 @@
 # runai log collector
 
-a propietary script for collecting logs using kubectl, and a general info dump for debugging and investigating issues in runai environments.
+This proprietary script is designed to collect logs via kubectl and generate a general information dump to aid in debugging and troubleshooting Run:AI environments.
 
-## `runai` namespace:
+## execution
 
-file tree:
+### locally:
+```
+chmod +x ./start.sh
+bash ./start.sh
+```
+
+### remotely:
+```
+TBA
+```
+
+## `runai` namespace
+
+### folder tree
 
 ```
 runai-logs-07-07-2025_14-30
@@ -20,9 +33,22 @@ runai-logs-07-07-2025_14-30
 └── runaiconfig.yaml
 ```
 
+### file mapping
+
+| file name | command output |
+|--|--|
+| `logs/${POD}_${CONTAINER}.log` | `kubectl -n $NAMESPACE logs --timestamps $POD -c  $CONTAINER` |
+| `cm_runai-public.yaml` | `kubectl  -n  runai  get  cm  runai-public  -o  yaml` |
+| `engine-config.yaml` | `kubectl  -n  runai  get  configs.engine.run.ai  engine-config  -o  yaml` |
+| `helm_charts_list.txt` | `helm  ls  -A` |
+| `helm-values_runai-cluster.yaml` | `helm  -n  runai  get  values  runai-cluster` |
+| `node-list.txt` | `kubectl  get  nodes  -o  wide` |
+| `pod-list_runai.txt` | `kubectl  -n  runai  get  pods  -o  wide` |
+| `runaiconfig.yaml` | `kubectl  -n  runai  get  runaiconfig  runai  -o  yaml` |
+
 ## `runai-backend` namespace
 
-file tree:
+### folder tree
 
 ```
 runai-backend-logs-07-07-2025_14-31
@@ -32,3 +58,11 @@ runai-backend-logs-07-07-2025_14-31
 │   ├── ...
 └── pod-list_runai-backend.txt
 ```
+
+### file mapping
+
+| file name | command output |
+|--|--|
+| `logs/${POD}_${CONTAINER}.log` | `kubectl -n $NAMESPACE logs --timestamps $POD -c  $CONTAINER` |
+| `helm-values_runai-backend.yaml` | `helm  -n  runai-backendget  values  runai-backend` |
+| `pod-list_runai-backend.txt` | `kubectl  -n  runai-backend  get  pods  -o  wide` |
