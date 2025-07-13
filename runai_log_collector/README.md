@@ -9,18 +9,18 @@ This proprietary script is designed to collect logs via kubectl and generate a g
 
 ## execution
 
+### remotely (faster):
+```
+curl -s https://raw.githubusercontent.com/runai-professional-services/utilities/refs/heads/main/runai_log_collector/start.sh | bash
+```
+
 ### locally:
 ```
 chmod +x ./start.sh
 bash ./start.sh
 ```
 
-### remotely:
-```
-TBA
-```
-
-Once the script is done, a `tar.gz` archive is generated per namespace (`runai` / `runai-backend`), time-stamped for identification.
+Once done, a `tar.gz` archive is generated per namespace (`runai` / `runai-backend`), time-stamped for identification.
 
 ## `runai` namespace
 
