@@ -2,6 +2,11 @@
 
 This proprietary script is designed to collect logs via kubectl and generate a general information dump to aid in debugging and troubleshooting Run:AI environments.
 
+
+## pre-requisites
+- [kubectl](https://kubernetes.io/docs/tasks/tools/#kubectl) (with admin access to the cluster)
+- [helm](https://helm.sh/docs/intro/install/)
+
 ## execution
 
 ### locally:
@@ -14,6 +19,8 @@ bash ./start.sh
 ```
 TBA
 ```
+
+Once the script is done, a `tar.gz` archive is generated per namespace (`runai` / `runai-backend`), time-stamped for identification.
 
 ## `runai` namespace
 
