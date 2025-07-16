@@ -1,6 +1,8 @@
-# Policy Templates
+# Policy Creator Script
 
-This directory contains YAML templates for RunAI policies that are loaded dynamically by the policy script.
+This script automates the creation and deployment of RunAI policies across multiple projects. It reads project information from a CSV file, applies YAML policy templates with project-specific variables, and deploys the policies to the RunAI control plane API.
+
+The script supports both standard policies (trainings, workspaces, inferences) and distributed training policies, with automatic validation before deployment.
 
 ## Running the Script
 
