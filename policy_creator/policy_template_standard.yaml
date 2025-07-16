@@ -1,0 +1,39 @@
+meta:
+  scope: project
+  projectId: PROJECT_ID_PLACEHOLDER
+  name: PROJECT_NAME_PLACEHOLDER-TYPE_POLICY_PLACEHOLDER
+policy:
+  defaults:
+    security:
+      uidGidSource: fromIdpToken
+    storage:
+      pvc:
+        instances:
+          - name: researcher-home-dir
+            path: USER_HOME_DIR_PLACEHOLDER
+            existingPvc: true
+            claimName: researcher-home-dir
+            readOnly: false
+            claimInfo:
+              accessModes:
+                readWriteMany: true
+      hostPath:
+        attributes:
+          readOnly: true
+        instances:
+          - name: passwd
+            path: /etc/passwd
+            mountPath: /etc/passwd
+          - name: group
+            path: /etc/group
+            mountPath: /etc/group
+  rules:
+    storage:
+      pvc:
+        instances:
+          locked:
+            - researcher-home-dir
+    security:
+      uidGidSource:
+        canEdit: false
+        required: true 

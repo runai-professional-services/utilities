@@ -25,7 +25,7 @@ These scripts perform comprehensive checks to verify that a PostgreSQL database 
 - Search path configuration for grafana user
 
 ### 2. `db_verification_post_creds.sql`
-**Extended verification script** that includes all basic checks plus additional verification tests for post-credential setup scenarios.
+**Extended verification script** that includes all basic checks plus additional verification tests after changing the PG DB credentials to new ones.
 
 **Additional checks beyond the basic script:**
 - Table ownership verification in grafana schema
