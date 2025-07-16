@@ -4,6 +4,8 @@ This script automates the creation and deployment of RunAI policies across multi
 
 The script supports both standard policies (trainings, workspaces, inferences) and distributed training policies, with automatic validation before deployment.
 
+See here for more infromation on RunAI policies templates: https://run-ai-docs.nvidia.com/self-hosted/platform-management/policies/policy-yaml-reference
+
 ## Running the Script
 
 1. Load environment variables from the `values.env` file:
