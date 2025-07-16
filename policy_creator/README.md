@@ -2,33 +2,36 @@
 
 This directory contains YAML templates for RunAI policies that are loaded dynamically by the policy script.
 
+## Running the Script
+
+1. Load environment variables from the `values.env` file:
+   ```bash
+   export $(cat values.env | xargs)
+   ```
+
+2. Run the Python script:
+   ```bash
+   python start.py
+   ```
+
+The `export $(cat values.env | xargs)` command loads all environment variables defined in the `values.env` file into the current shell session, making them available to the Python script.
+
 ## Template Files
 
-### `policy_template_distributed.yaml`
-Template for distributed training policies. This template includes separate configurations for master and worker nodes.
+The script automatically loads these templates from the current directory where the script is executed. The template files must be placed in the same directory as the `start.py` script.
 
-### `policy_template_standard.yaml`
-Template for standard policies (trainings, workspaces, inferences). This template includes hostPath mounts for `/etc/passwd` and `/etc/group`.
+- `policy_template_standard.yaml`
+Template for standard policies (trainings, workspaces, inferences).
 
-## Template Variables
+- `policy_template_distributed.yaml`
+Template for distributed training policies. This template differs from the standard template as it includes separate configurations for master and workers.
 
-The following placeholders can be used in the templates and will be replaced with actual values:
+The templates use standard YAML format with `PLACEHOLDER_NAME` placeholders. The script uses simple string replacement for variable substitution.
 
 - `PROJECT_ID_PLACEHOLDER` - The project ID (integer)
 - `PROJECT_NAME_PLACEHOLDER` - The project name (string)
 - `USER_HOME_DIR_PLACEHOLDER` - The user's home directory path (string)
 - `TYPE_POLICY_PLACEHOLDER` - The policy type (trainings, workspaces, distributed, inferences)
-
-## Usage
-
-The script automatically loads these templates from the current directory where the script is executed. The template files must be placed in the same directory as the `start.py` script.
-
-Required template files:
-- `policy_template_distributed.yaml`
-- `policy_template_standard.yaml`
-
-Required data file:
-- `project_list.csv` - CSV file containing project information
 
 ### CSV File Structure
 
@@ -50,37 +53,15 @@ project_id,project_name,user_home_dir
 
 **Note:** The first row should be a header row with column names. The script will skip this header row when processing the data.
 
-### Running the Script
+### Environment Variables (values.env)
 
-1. Load environment variables from the `values.env` file:
-   ```bash
-   export $(cat values.env | xargs)
-   ```
+The `values.env` file contains environment variables required for the script to authenticate and connect to the RunAI cluster. You must configure these variables before running the script:
 
-2. Run the Python script:
-   ```bash
-   python start.py
-   ```
+| Variable | Description | Required |
+|----------|-------------|----------|
+| `RUN_AI_APP_CLIENT_ID` | RunAI application client ID for authentication | Yes |
+| `RUN_AI_APP_CLIENT_SECRET` | RunAI application client secret for authentication | Yes |
+| `RUN_AI_CLUSTER_ID` | The RunAI cluster ID to connect to | Yes |
+| `RUN_AI_BASE_URL` | The RunAI control plane URL | Yes |
 
-The `export $(cat values.env | xargs)` command loads all environment variables defined in the `values.env` file into the current shell session, making them available to the Python script.
-
-## Template Format
-
-Templates use standard YAML format with `PLACEHOLDER_NAME` placeholders. The script uses simple string replacement for variable substitution.
-
-Example:
-```yaml
-meta:
-  scope: project
-  projectId: PROJECT_ID_PLACEHOLDER
-  name: PROJECT_NAME_PLACEHOLDER-TYPE_POLICY_PLACEHOLDER
-```
-
-## Adding New Templates
-
-To add a new template:
-
-1. Create a new YAML file in the current directory with the naming convention `policy_template_[type].yaml`
-2. Use the appropriate placeholders for dynamic values
-3. Update the script's `load_templates()` method to load your new template
-4. Update the `put_policy()` method to use your new template for the appropriate policy type 
+**Security Note:** Keep your `values.env` file secure and never commit it to version control. Consider adding it to your `.gitignore` file to prevent accidental commits.
