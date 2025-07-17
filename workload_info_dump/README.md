@@ -4,19 +4,34 @@ This script (`start.sh`) collects and archives information about a specific Run:
 
 ## Usage
 
+### Directly from github (faster):
 ```sh
-./start.sh --project <PROJECT> --workload <WORKLOAD> --type <TYPE>
+curl -s https://raw.githubusercontent.com/runai-professional-services/utilities/refs/heads/main/workload_info_dump/start.sh | bash -s -- --project <PROJECT> --type <TYPE> --workload <WORKLOAD>
 ```
 
-- `<PROJECT>`: The Run:AI project (queue) label. The script will automatically resolve the correct Kubernetes namespace.
+Example:
+```sh
+curl -s https://raw.githubusercontent.com/runai-professional-services/utilities/refs/heads/main/workload_info_dump/start.sh | bash -s -- --project test --type tw --workload test-train
+```
+
+### Locally:
+```sh
+./start.sh --project <PROJECT> --type <TYPE> --workload <WORKLOAD>
+```
+
+Example:
+```sh
+./start.sh --project test --type tw --workload test-train
+```
+
+- `<PROJECT>`: The Run:AI project name. The script will automatically resolve the correct Kubernetes namespace.
 - `<WORKLOAD>`: The name of the workload.
 - `<TYPE>`: The type or alias of the workload resource. Allowed values:
-  - `dinfw`, `distributedinferenceworkloads`
-  - `dw`, `distributedworkloads`
-  - `ew`, `externalworkloads`
-  - `infw`, `inferenceworkloads`
-  - `iw`, `interactiveworkloads`
-  - `tw`, `trainingworkloads`
+  - Interactive: `iw`, `interactiveworkloads`
+  - Training: `tw`, `trainingworkloads`
+  - Distributed Training: `dw`, `distributedworkloads`
+  - Inference: `infw`, `inferenceworkloads`
+  - Distributed Inference: `dinfw`, `distributedinferenceworkloads`
 
 ## What it does
 1. Resolves the Kubernetes namespace for the given project.
@@ -43,7 +58,3 @@ This will create an archive named like `runai-test_iw_test-workload_2024_06_07-1
 - `test-workload_iw_pod.yaml`
 - `test-workload_iw_podgroup.yaml`
 - `test-workload_iw_pod_logs.txt`
-
-## Notes
-- The script requires `kubectl` access to the cluster and permission to read the relevant resources.
-- The script prints a summary of what is being collected and reports the status of each command. 
