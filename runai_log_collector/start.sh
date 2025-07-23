@@ -18,26 +18,35 @@ collect_logs() {
 }
 
 # Namespaces to check
-NAMESPACES=("runai" "runai-backend")
+NAMESPACES=("runai-backend" "runai")
+CLUSTER_URL=$(kubectl -n runai get runaiconfig runai -o jsonpath='{.spec.__internal.global.clusterURL}')
+CP_URL=$(kubectl -n runai get runaiconfig runai -o jsonpath='{.spec.__internal.global.controlPlane.url}')
+CP_NAME_CLEAN=$(echo "$CP_URL" | sed 's/https:\/\///; s/\./-/g')
+
+echo "Cluster URL: $CLUSTER_URL"
+echo "Control Plane URL: $CP_URL"
+echo "--------------------------------"
 
 for NAMESPACE in "${NAMESPACES[@]}"; do
+  # Check namespace existence before any operations
+  kubectl get namespace "$NAMESPACE" >/dev/null 2>&1
+  if [ $? -ne 0 ]; then
+    echo "Namespace '$NAMESPACE' does not exist. Skipping."
+    continue
+  fi
+
+  echo "Namespace '$NAMESPACE' exists. Extracting logs and info:"
   TIMESTAMP=$(date +%d-%m-%Y_%H-%M)
-  LOG_NAME="$NAMESPACE-logs-$TIMESTAMP"
+  LOG_NAME="$CP_NAME_CLEAN-$NAMESPACE-logs-$TIMESTAMP"
   LOG_DIR="./$LOG_NAME"
-  LOG_ARCHIVE_NAME="$LOG_NAME.tar.gz"
   mkdir $LOG_DIR
   SCRIPT_LOG="$LOG_DIR/script.log"
+  LOG_ARCHIVE_NAME="$LOG_NAME.tar.gz"
+  echo "Log archive name: $LOG_ARCHIVE_NAME"
+  echo "--------------------------------"
 
   # Start logging all output for this namespace to script.log
   {
-    kubectl get namespace "$NAMESPACE" >/dev/null 2>&1
-    if [ $? -ne 0 ]; then
-      echo "Namespace '$NAMESPACE' does not exist. Skipping."
-      continue
-    fi
-
-    echo "Namespace '$NAMESPACE' exists. Extracting logs and info:"
-
     # Collect logs into logs subdirectory
     collect_logs $NAMESPACE $LOG_DIR
 
