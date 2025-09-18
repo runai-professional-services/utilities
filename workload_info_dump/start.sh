@@ -167,6 +167,70 @@ get_ksvc_yaml() {
   fi
 }
 
+# Function to get pod descriptions for all pods in namespace
+get_all_pods_describe() {
+  local workload="$1"
+  local type_safe="$2"
+  
+  local pod_describe_file="${workload}_${type_safe}_all_pods_describe.txt"
+  echo "  📄 Getting pod descriptions for all pods in namespace..." >&2
+  kubectl -n "$NAMESPACE" describe pods > "$pod_describe_file"
+  if [[ $? -eq 0 ]]; then
+    echo "    ✅ Pod descriptions retrieved" >&2
+    echo "$pod_describe_file"
+  else
+    echo "    ❌ Failed to retrieve pod descriptions" >&2; exit 1
+  fi
+}
+
+# Function to get pod list for all pods in namespace
+get_all_pods_list() {
+  local workload="$1"
+  local type_safe="$2"
+  
+  local pod_list_file="${workload}_${type_safe}_all_pods_list.txt"
+  echo "  📄 Getting pod list for all pods in namespace..." >&2
+  kubectl -n "$NAMESPACE" get pods -o wide > "$pod_list_file"
+  if [[ $? -eq 0 ]]; then
+    echo "    ✅ Pod list retrieved" >&2
+    echo "$pod_list_file"
+  else
+    echo "    ❌ Failed to retrieve pod list" >&2; exit 1
+  fi
+}
+
+# Function to get all ConfigMaps in namespace
+get_all_configmaps() {
+  local workload="$1"
+  local type_safe="$2"
+  
+  local configmap_file="${workload}_${type_safe}_all_configmaps.yaml"
+  echo "  📄 Getting all ConfigMaps in namespace..." >&2
+  kubectl -n "$NAMESPACE" get configmap -o yaml > "$configmap_file"
+  if [[ $? -eq 0 ]]; then
+    echo "    ✅ ConfigMaps retrieved" >&2
+    echo "$configmap_file"
+  else
+    echo "    ❌ Failed to retrieve ConfigMaps" >&2; exit 1
+  fi
+}
+
+# Function to get all PVCs in namespace
+get_all_pvcs() {
+  local workload="$1"
+  local type_safe="$2"
+  
+  local pvc_file="${workload}_${type_safe}_all_pvcs.yaml"
+  echo "  📄 Getting all PVCs in namespace..." >&2
+  kubectl -n "$NAMESPACE" get pvc -o yaml > "$pvc_file"
+  if [[ $? -eq 0 ]]; then
+    echo "    ✅ PVCs retrieved" >&2
+    echo "$pvc_file"
+  else
+    echo "    ❌ Failed to retrieve PVCs" >&2; exit 1
+  fi
+}
+
 usage() {
   echo "Usage: $0 --project <PROJECT> --workload <WORKLOAD> --type <TYPE>"
   echo "Example: $0 --project test --type tw --workload test-train"
@@ -265,6 +329,22 @@ if [[ "$CANONICAL_TYPE" == "inferenceworkloads" ]]; then
   ksvc_spec=$(get_ksvc_yaml "$WORKLOAD" "$TYPE_SAFE")
   OUTPUT_FILES+=("$ksvc_spec")
 fi
+
+# Get pod descriptions for all pods in namespace
+pod_describe_output=$(get_all_pods_describe "$WORKLOAD" "$TYPE_SAFE")
+OUTPUT_FILES+=("$pod_describe_output")
+
+# Get pod list for all pods in namespace
+pod_list_output=$(get_all_pods_list "$WORKLOAD" "$TYPE_SAFE")
+OUTPUT_FILES+=("$pod_list_output")
+
+# Get all ConfigMaps in namespace
+configmap_output=$(get_all_configmaps "$WORKLOAD" "$TYPE_SAFE")
+OUTPUT_FILES+=("$configmap_output")
+
+# Get all PVCs in namespace
+pvc_output=$(get_all_pvcs "$WORKLOAD" "$TYPE_SAFE")
+OUTPUT_FILES+=("$pvc_output")
 
 # Archive the files
 tar -czf "$ARCHIVE" "${OUTPUT_FILES[@]}"
