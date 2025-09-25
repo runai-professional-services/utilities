@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # Workload Info Dump Script
-VERSION="2.0.0"
+VERSION="2.1.0"
 
 # Removed 'set -e' to allow script to continue when individual commands fail
 
@@ -211,6 +211,58 @@ get_pod_logs() {
   fi
 }
 
+# Function to get nvidia-smi output from containers
+get_nvidia_smi_output() {
+  local workload="$1"
+  local type_safe="$2"
+  
+  echo "  📄 Getting nvidia-smi output from containers..." >&2
+  
+  # Get all pods for this workload
+  local pods=$(kubectl -n "$NAMESPACE" get pod -l workloadName=$workload -o jsonpath='{.items[*].metadata.name}' 2>/dev/null)
+  
+  if [[ -z "$pods" ]]; then
+    echo "    ⚠️  No pods found for workload: $workload" >&2
+    return 1
+  fi
+  
+  local output_files=()
+  local found_nvidia=false
+  
+  # Iterate through each pod
+  for pod in $pods; do
+    echo "    🐳 Processing pod: $pod" >&2
+    
+    # Get all containers (including init containers) for this pod
+    local containers=$(kubectl -n "$NAMESPACE" get pod "$pod" -o jsonpath='{.spec.initContainers[*].name} {.spec.containers[*].name}' 2>/dev/null)
+    
+    # Iterate through each container
+    for container in $containers; do
+      local nvidia_file="${workload}_${type_safe}_nvidia_smi_${container}.txt"
+      echo "      🔍 Checking nvidia-smi in container: $container" >&2
+      
+      # Try to run nvidia-smi in the container
+      if kubectl -n "$NAMESPACE" exec "$pod" -c "$container" -- nvidia-smi > "$nvidia_file" 2>/dev/null; then
+        echo "        ✅ nvidia-smi output retrieved: $container" >&2
+        output_files+=("$nvidia_file")
+        found_nvidia=true
+      else
+        # Clean up empty file if command failed
+        rm -f "$nvidia_file" 2>/dev/null
+        echo "        ⚠️  nvidia-smi not available or failed in container: $container" >&2
+      fi
+    done
+  done
+  
+  if [[ "$found_nvidia" == true ]]; then
+    echo "    ✅ nvidia-smi output retrieved from ${#output_files[@]} containers" >&2
+    printf '%s\n' "${output_files[@]}"
+  else
+    echo "    ⚠️  No nvidia-smi output was successfully retrieved (GPU may not be available or nvidia-smi not installed)" >&2
+    return 1
+  fi
+}
+
 # Function to get KSVC YAML (for inference workloads)
 get_ksvc_yaml() {
   local workload="$1"
@@ -352,6 +404,16 @@ if pod_logs_output=$(get_pod_logs "$WORKLOAD" "$TYPE_SAFE"); then
       OUTPUT_FILES+=("$log_file")
     fi
   done <<< "$pod_logs_output"
+fi
+
+# Get nvidia-smi output from containers
+if nvidia_smi_output=$(get_nvidia_smi_output "$WORKLOAD" "$TYPE_SAFE"); then
+  # Add each nvidia-smi file to the output files array
+  while IFS= read -r nvidia_file; do
+    if [[ -n "$nvidia_file" ]]; then
+      OUTPUT_FILES+=("$nvidia_file")
+    fi
+  done <<< "$nvidia_smi_output"
 fi
 
 # Get ksvc for inference workloads
