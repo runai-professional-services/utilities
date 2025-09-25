@@ -1,6 +1,60 @@
 #!/bin/bash
 
-set -e
+# Workload Info Dump Script
+VERSION="2.0.0"
+
+# Removed 'set -e' to allow script to continue when individual commands fail
+
+usage() {
+  echo "Workload Info Dump Script v${VERSION}"
+  echo ""
+  echo "Usage: $0 --project <PROJECT> --workload <WORKLOAD> --type <TYPE>"
+  echo "       $0 --version"
+  echo ""
+  echo "Examples:"
+  echo "  $0 --project test --type tw --workload test-train"
+  echo "  $0 --project test --type iw --workload test-interactive"
+  echo "  $0 --project test --type infw --workload test-inference"
+  echo "  $0 --project test --type dinfw --workload test-distributed-inference"
+  echo "  $0 --project test --type dw --workload test-distributed-training"
+  echo "  $0 --project test --type ew --workload test-external"
+  echo ""
+  echo "Options:"
+  echo "  --version    Show script version and exit"
+  exit 1
+}
+
+# Parse arguments first to handle --version before kubectl checks
+while [[ $# -gt 0 ]]; do
+  key="$1"
+  case $key in
+    --project)
+      PROJECT="$2"
+      shift; shift
+      ;;
+    --workload)
+      WORKLOAD="$2"
+      shift; shift
+      ;;
+    --type)
+      TYPE="$2"
+      shift; shift
+      ;;
+    --version)
+      echo "Workload Info Dump Script v${VERSION}"
+      exit 0
+      ;;
+    *)
+      echo "Unknown argument: $1"
+      usage
+      ;;
+  esac
+done
+
+# Validate required arguments
+if [[ -z "$PROJECT" || -z "$WORKLOAD" || -z "$TYPE" ]]; then
+  usage
+fi
 
 # Check if kubectl exists and is accessible
 if ! command -v kubectl &> /dev/null; then
@@ -17,6 +71,12 @@ if ! kubectl cluster-info &> /dev/null; then
     exit 1
 fi
 echo "✅ kubectl can connect to cluster"
+
+# Display script version
+echo ""
+echo "🔧 Workload Info Dump Script v${VERSION}"
+echo "   Enhanced for resilient resource collection"
+echo ""
 
 # Function to map type aliases to canonical k8s resource names
 get_canonical_type() {
@@ -46,12 +106,12 @@ get_workload_yaml() {
   
   local workload_yaml="${workload}_${type_safe}_workload.yaml"
   echo "  📄 Getting $canonical_type YAML..." >&2
-  kubectl -n "$NAMESPACE" get "$canonical_type" "$workload" -o yaml > "$workload_yaml"
-  if [[ $? -eq 0 ]]; then
+  if kubectl -n "$NAMESPACE" get "$canonical_type" "$workload" -o yaml > "$workload_yaml" 2>/dev/null; then
     echo "    ✅ Workload YAML retrieved" >&2
     echo "$workload_yaml"
   else
-    echo "    ❌ Failed to retrieve Workload YAML" >&2; exit 1
+    echo "    ❌ Failed to retrieve Workload YAML (resource may not exist or be accessible)" >&2
+    return 1
   fi
 }
 
@@ -62,12 +122,12 @@ get_runaijob_yaml() {
   
   local runaijob_yaml="${workload}_${type_safe}_runaijob.yaml"
   echo "  📄 Getting RunAIJob YAML..." >&2
-  kubectl -n "$NAMESPACE" get rj "$workload" -o yaml > "$runaijob_yaml"
-  if [[ $? -eq 0 ]]; then
+  if kubectl -n "$NAMESPACE" get rj "$workload" -o yaml > "$runaijob_yaml" 2>/dev/null; then
     echo "    ✅ RunAIJob YAML retrieved" >&2
     echo "$runaijob_yaml"
   else
-    echo "    ❌ Failed to retrieve RunAIJob YAML" >&2; exit 1
+    echo "    ❌ Failed to retrieve RunAIJob YAML (resource may not exist or be accessible)" >&2
+    return 1
   fi
 }
 
@@ -78,12 +138,12 @@ get_pod_yaml() {
   
   local pod_yaml="${workload}_${type_safe}_pod.yaml"
   echo "  📄 Getting Pod YAML..." >&2
-  kubectl -n "$NAMESPACE" get pod -l workloadName=$workload -o yaml > "$pod_yaml"
-  if [[ $? -eq 0 ]]; then
+  if kubectl -n "$NAMESPACE" get pod -l workloadName=$workload -o yaml > "$pod_yaml" 2>/dev/null; then
     echo "    ✅ Pod YAML retrieved" >&2
     echo "$pod_yaml"
   else
-    echo "    ❌ Failed to retrieve Pod YAML" >&2; exit 1
+    echo "    ❌ Failed to retrieve Pod YAML (no pods found or not accessible)" >&2
+    return 1
   fi
 }
 
@@ -94,12 +154,12 @@ get_podgroup_yaml() {
   
   local podgroup_yaml="${workload}_${type_safe}_podgroup.yaml"
   echo "  📄 Getting PodGroup YAML..." >&2
-  kubectl -n "$NAMESPACE" get pg -l workloadName=$workload -o yaml > "$podgroup_yaml"
-  if [[ $? -eq 0 ]]; then
+  if kubectl -n "$NAMESPACE" get pg -l workloadName=$workload -o yaml > "$podgroup_yaml" 2>/dev/null; then
     echo "    ✅ PodGroup YAML retrieved" >&2
     echo "$podgroup_yaml"
   else
-    echo "    ❌ Failed to retrieve PodGroup YAML" >&2; exit 1
+    echo "    ❌ Failed to retrieve PodGroup YAML (resource may not exist or be accessible)" >&2
+    return 1
   fi
 }
 
@@ -147,7 +207,7 @@ get_pod_logs() {
     printf '%s\n' "${output_files[@]}"
   else
     echo "    ❌ No container logs were successfully retrieved" >&2
-    exit 1
+    return 1
   fi
 }
 
@@ -158,12 +218,12 @@ get_ksvc_yaml() {
   
   local ksvc_spec="${workload}_${type_safe}_ksvc.yaml"
   echo "  📄 Getting KSVC YAML..." >&2
-  kubectl -n "$NAMESPACE" get ksvc "$workload" -o yaml > "$ksvc_spec"
-  if [[ $? -eq 0 ]]; then
+  if kubectl -n "$NAMESPACE" get ksvc "$workload" -o yaml > "$ksvc_spec" 2>/dev/null; then
     echo "    ✅ KSVC YAML retrieved" >&2
     echo "$ksvc_spec"
   else
-    echo "    ❌ Failed to retrieve KSVC YAML" >&2; exit 1
+    echo "    ❌ Failed to retrieve KSVC YAML (resource may not exist or be accessible)" >&2
+    return 1
   fi
 }
 
@@ -174,12 +234,12 @@ get_all_pods_describe() {
   
   local pod_describe_file="${workload}_${type_safe}_all_pods_describe.txt"
   echo "  📄 Getting pod descriptions for all pods in namespace..." >&2
-  kubectl -n "$NAMESPACE" describe pods > "$pod_describe_file"
-  if [[ $? -eq 0 ]]; then
+  if kubectl -n "$NAMESPACE" describe pods > "$pod_describe_file" 2>/dev/null; then
     echo "    ✅ Pod descriptions retrieved" >&2
     echo "$pod_describe_file"
   else
-    echo "    ❌ Failed to retrieve pod descriptions" >&2; exit 1
+    echo "    ❌ Failed to retrieve pod descriptions (no pods found or not accessible)" >&2
+    return 1
   fi
 }
 
@@ -190,12 +250,12 @@ get_all_pods_list() {
   
   local pod_list_file="${workload}_${type_safe}_all_pods_list.txt"
   echo "  📄 Getting pod list for all pods in namespace..." >&2
-  kubectl -n "$NAMESPACE" get pods -o wide > "$pod_list_file"
-  if [[ $? -eq 0 ]]; then
+  if kubectl -n "$NAMESPACE" get pods -o wide > "$pod_list_file" 2>/dev/null; then
     echo "    ✅ Pod list retrieved" >&2
     echo "$pod_list_file"
   else
-    echo "    ❌ Failed to retrieve pod list" >&2; exit 1
+    echo "    ❌ Failed to retrieve pod list (no pods found or not accessible)" >&2
+    return 1
   fi
 }
 
@@ -206,12 +266,12 @@ get_all_configmaps() {
   
   local configmap_file="${workload}_${type_safe}_all_configmaps.yaml"
   echo "  📄 Getting all ConfigMaps in namespace..." >&2
-  kubectl -n "$NAMESPACE" get configmap -o yaml > "$configmap_file"
-  if [[ $? -eq 0 ]]; then
+  if kubectl -n "$NAMESPACE" get configmap -o yaml > "$configmap_file" 2>/dev/null; then
     echo "    ✅ ConfigMaps retrieved" >&2
     echo "$configmap_file"
   else
-    echo "    ❌ Failed to retrieve ConfigMaps" >&2; exit 1
+    echo "    ❌ Failed to retrieve ConfigMaps (no configmaps found or not accessible)" >&2
+    return 1
   fi
 }
 
@@ -222,58 +282,22 @@ get_all_pvcs() {
   
   local pvc_file="${workload}_${type_safe}_all_pvcs.yaml"
   echo "  📄 Getting all PVCs in namespace..." >&2
-  kubectl -n "$NAMESPACE" get pvc -o yaml > "$pvc_file"
-  if [[ $? -eq 0 ]]; then
+  if kubectl -n "$NAMESPACE" get pvc -o yaml > "$pvc_file" 2>/dev/null; then
     echo "    ✅ PVCs retrieved" >&2
     echo "$pvc_file"
   else
-    echo "    ❌ Failed to retrieve PVCs" >&2; exit 1
+    echo "    ❌ Failed to retrieve PVCs (no PVCs found or not accessible)" >&2
+    return 1
   fi
 }
 
-usage() {
-  echo "Usage: $0 --project <PROJECT> --workload <WORKLOAD> --type <TYPE>"
-  echo "Example: $0 --project test --type tw --workload test-train"
-  echo "Example: $0 --project test --type iw --workload test-interactive"
-  echo "Example: $0 --project test --type infw --workload test-inference"
-  echo "Example: $0 --project test --type dinfw --workload test-distributed-inference"
-  echo "Example: $0 --project test --type dw --workload test-distributed-training"
-  echo "Example: $0 --project test --type ew --workload test-external"
-  exit 1
-}
-
-# Parse arguments
-while [[ $# -gt 0 ]]; do
-  key="$1"
-  case $key in
-    --project)
-      PROJECT="$2"
-      shift; shift
-      ;;
-    --workload)
-      WORKLOAD="$2"
-      shift; shift
-      ;;
-    --type)
-      TYPE="$2"
-      shift; shift
-      ;;
-    *)
-      echo "Unknown argument: $1"
-      usage
-      ;;
-  esac
-done
-
-# Validate required arguments
-if [[ -z "$PROJECT" || -z "$WORKLOAD" || -z "$TYPE" ]]; then
-  usage
-fi
+# Arguments have already been parsed and validated above
 
 # Lookup namespace from project
-NAMESPACE=$(kubectl get ns -l runai/queue="$PROJECT" -o jsonpath='{.items[0].metadata.name}')
+NAMESPACE=$(kubectl get ns -l runai/queue="$PROJECT" -o jsonpath='{.items[0].metadata.name}' 2>/dev/null)
 if [[ -z "$NAMESPACE" ]]; then
-  echo "No namespace found for project: $PROJECT"
+  echo "❌ No namespace found for project: $PROJECT"
+  echo "Please check that the project exists and is accessible"
   exit 1
 fi
 
@@ -291,67 +315,92 @@ fi
 TYPE_SAFE=$(echo "$TYPE" | tr '/' '_')
 OUTPUT_FILES=()
 
-# Add timestamp for archive
+# Add timestamp and version for archive
 TIMESTAMP=$(date +"%Y_%m_%d-%H_%M")
-ARCHIVE="${PROJECT}_${TYPE_SAFE}_${WORKLOAD}_${TIMESTAMP}.tar.gz"
+VERSION_SAFE=$(echo "$VERSION" | tr '.' '_')
+ARCHIVE="${PROJECT}_${TYPE_SAFE}_${WORKLOAD}_v${VERSION_SAFE}_${TIMESTAMP}.tar.gz"
 
 # Execute all collection functions
 echo "📁 Starting collection process..."
 echo ""
 
 # Get workload YAML
-workload_yaml=$(get_workload_yaml "$WORKLOAD" "$CANONICAL_TYPE" "$TYPE_SAFE")
-OUTPUT_FILES+=("$workload_yaml")
+if workload_yaml=$(get_workload_yaml "$WORKLOAD" "$CANONICAL_TYPE" "$TYPE_SAFE"); then
+  OUTPUT_FILES+=("$workload_yaml")
+fi
 
 # Get runaijob YAML
-runaijob_yaml=$(get_runaijob_yaml "$WORKLOAD" "$TYPE_SAFE")
-OUTPUT_FILES+=("$runaijob_yaml")
+if runaijob_yaml=$(get_runaijob_yaml "$WORKLOAD" "$TYPE_SAFE"); then
+  OUTPUT_FILES+=("$runaijob_yaml")
+fi
 
 # Get pod YAML
-pod_yaml=$(get_pod_yaml "$WORKLOAD" "$TYPE_SAFE")
-OUTPUT_FILES+=("$pod_yaml")
+if pod_yaml=$(get_pod_yaml "$WORKLOAD" "$TYPE_SAFE"); then
+  OUTPUT_FILES+=("$pod_yaml")
+fi
 
 # Get podgroup YAML
-podgroup_yaml=$(get_podgroup_yaml "$WORKLOAD" "$TYPE_SAFE")
-OUTPUT_FILES+=("$podgroup_yaml")
+if podgroup_yaml=$(get_podgroup_yaml "$WORKLOAD" "$TYPE_SAFE"); then
+  OUTPUT_FILES+=("$podgroup_yaml")
+fi
 
 # Get pod logs
-pod_logs_output=$(get_pod_logs "$WORKLOAD" "$TYPE_SAFE")
-# Add each log file to the output files array
-while IFS= read -r log_file; do
-  if [[ -n "$log_file" ]]; then
-    OUTPUT_FILES+=("$log_file")
-  fi
-done <<< "$pod_logs_output"
+if pod_logs_output=$(get_pod_logs "$WORKLOAD" "$TYPE_SAFE"); then
+  # Add each log file to the output files array
+  while IFS= read -r log_file; do
+    if [[ -n "$log_file" ]]; then
+      OUTPUT_FILES+=("$log_file")
+    fi
+  done <<< "$pod_logs_output"
+fi
 
 # Get ksvc for inference workloads
 if [[ "$CANONICAL_TYPE" == "inferenceworkloads" ]]; then
-  ksvc_spec=$(get_ksvc_yaml "$WORKLOAD" "$TYPE_SAFE")
-  OUTPUT_FILES+=("$ksvc_spec")
+  if ksvc_spec=$(get_ksvc_yaml "$WORKLOAD" "$TYPE_SAFE"); then
+    OUTPUT_FILES+=("$ksvc_spec")
+  fi
 fi
 
 # Get pod descriptions for all pods in namespace
-pod_describe_output=$(get_all_pods_describe "$WORKLOAD" "$TYPE_SAFE")
-OUTPUT_FILES+=("$pod_describe_output")
+if pod_describe_output=$(get_all_pods_describe "$WORKLOAD" "$TYPE_SAFE"); then
+  OUTPUT_FILES+=("$pod_describe_output")
+fi
 
 # Get pod list for all pods in namespace
-pod_list_output=$(get_all_pods_list "$WORKLOAD" "$TYPE_SAFE")
-OUTPUT_FILES+=("$pod_list_output")
+if pod_list_output=$(get_all_pods_list "$WORKLOAD" "$TYPE_SAFE"); then
+  OUTPUT_FILES+=("$pod_list_output")
+fi
 
 # Get all ConfigMaps in namespace
-configmap_output=$(get_all_configmaps "$WORKLOAD" "$TYPE_SAFE")
-OUTPUT_FILES+=("$configmap_output")
+if configmap_output=$(get_all_configmaps "$WORKLOAD" "$TYPE_SAFE"); then
+  OUTPUT_FILES+=("$configmap_output")
+fi
 
 # Get all PVCs in namespace
-pvc_output=$(get_all_pvcs "$WORKLOAD" "$TYPE_SAFE")
-OUTPUT_FILES+=("$pvc_output")
+if pvc_output=$(get_all_pvcs "$WORKLOAD" "$TYPE_SAFE"); then
+  OUTPUT_FILES+=("$pvc_output")
+fi
+
+echo ""
+echo "📊 Collection Summary:"
+echo "  Total files collected: ${#OUTPUT_FILES[@]}"
+if [[ ${#OUTPUT_FILES[@]} -eq 0 ]]; then
+  echo "  ⚠️  No files were successfully collected."
+  echo "  This may indicate that the workload doesn't exist or resources are not accessible."
+  echo "  Please check the workload name, type, and your permissions."
+  exit 1
+fi
+
+echo "  Files collected:"
+for file in "${OUTPUT_FILES[@]}"; do
+  echo "    - $file"
+done
 
 # Archive the files
-tar -czf "$ARCHIVE" "${OUTPUT_FILES[@]}"
-
-if [[ $? -eq 0 ]]; then
-  echo ""
-  echo "📦 Archive created: $ARCHIVE"
+echo ""
+echo "📦 Creating archive..."
+if tar -czf "$ARCHIVE" "${OUTPUT_FILES[@]}" 2>/dev/null; then
+  echo "  ✅ Archive created: $ARCHIVE"
   
   # Clean up individual files
   echo ""
@@ -365,7 +414,10 @@ if [[ $? -eq 0 ]]; then
   echo ""
   echo "✅ Cleanup completed. Only archive remains: $ARCHIVE"
 else
-  echo ""
-  echo "❌ Failed to create archive. Individual files preserved."
+  echo "  ❌ Failed to create archive. Individual files preserved."
+  echo "  You can manually archive the following files:"
+  for file in "${OUTPUT_FILES[@]}"; do
+    echo "    - $file"
+  done
   exit 1
 fi
