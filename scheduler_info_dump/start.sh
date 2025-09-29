@@ -65,7 +65,7 @@ dump_resource() {
     print_status "Extracting individual ${resource_type} manifests..."
     kubectl get ${resource_type} --no-headers -o custom-columns=":metadata.name" | while read resource; do
         if [ -n "$resource" ]; then
-            kubectl get ${resource_singular} "$resource" -o yaml > "${resource_singular}_${resource}.yaml"
+            kubectl get ${resource_type} "$resource" -o yaml > "${resource_singular}_${resource}.yaml"
             print_status "  - Extracted ${resource_singular}: $resource"
         fi
     done
