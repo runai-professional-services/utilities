@@ -1,1 +1,5 @@
 .DS_Store
+
+# Workload info dump generated files
+*.tar.gz
+*_runaijob.yaml

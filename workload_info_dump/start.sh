@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # Workload Info Dump Script
-VERSION="2.1.0"
+VERSION="2.3.0"
 
 # Removed 'set -e' to allow script to continue when individual commands fail
 
@@ -75,7 +75,7 @@ echo "✅ kubectl can connect to cluster"
 # Display script version
 echo ""
 echo "🔧 Workload Info Dump Script v${VERSION}"
-echo "   Enhanced for resilient resource collection"
+echo "   Enhanced for resilient resource collection with unified pod processing"
 echo ""
 
 # Function to map type aliases to canonical k8s resource names
@@ -131,18 +131,114 @@ get_runaijob_yaml() {
   fi
 }
 
-# Function to get pod YAML
-get_pod_yaml() {
+# Function to get pods and containers information (centralized discovery)
+get_pods_and_containers_info() {
+  local workload="$1"
+  
+  # Get all pods for this workload in one call
+  local pods_json=$(kubectl -n "$NAMESPACE" get pod -l workloadName=$workload -o json 2>/dev/null)
+  
+  if [[ -z "$pods_json" ]] || [[ "$pods_json" == "null" ]]; then
+    echo "    ❌ No pods found for workload: $workload" >&2
+    return 1
+  fi
+  
+  # Extract pod names and containers info using jq for efficiency
+  if command -v jq &> /dev/null; then
+    # Use jq if available for better JSON parsing
+    echo "$pods_json" | jq -r '.items[] | "\(.metadata.name)|\([(.spec.initContainers//[])[]?.name, .spec.containers[].name] | join(" "))"'
+  else
+    # Fallback to kubectl jsonpath if jq is not available
+    local pod_names=$(echo "$pods_json" | kubectl get -f - -o jsonpath='{.items[*].metadata.name}' 2>/dev/null)
+    
+    for pod in $pod_names; do
+      local containers=$(kubectl -n "$NAMESPACE" get pod "$pod" -o jsonpath='{.spec.initContainers[*].name} {.spec.containers[*].name}' 2>/dev/null)
+      echo "${pod}|${containers}"
+    done
+  fi
+}
+
+# Unified function to process all pod operations efficiently (OPTIMIZED)
+process_pods_unified() {
   local workload="$1"
   local type_safe="$2"
+  local pods_info="$3"  # Pre-fetched pod information
   
-  local pod_yaml="${workload}_${type_safe}_pod.yaml"
-  echo "  📄 Getting Pod YAML..." >&2
-  if kubectl -n "$NAMESPACE" get pod -l workloadName=$workload -o yaml > "$pod_yaml" 2>/dev/null; then
-    echo "    ✅ Pod YAML retrieved" >&2
-    echo "$pod_yaml"
+  echo "  📄 Processing all pod operations..." >&2
+  
+  if [[ -z "$pods_info" ]]; then
+    echo "    ❌ No pod information provided" >&2
+    return 1
+  fi
+  
+  local output_files=()
+  local total_pods=0
+  local total_containers=0
+  local total_nvidia_files=0
+  
+  # Parse pre-fetched pod information and process each pod completely
+  while IFS='|' read -r pod containers; do
+    [[ -z "$pod" ]] && continue
+    ((total_pods++))
+    
+    echo "    🐳 Processing pod: $pod" >&2
+    
+    # 1. Get Pod YAML
+    local pod_yaml="${workload}_${type_safe}_pod_${pod}.yaml"
+    if kubectl -n "$NAMESPACE" get pod "$pod" -o yaml > "$pod_yaml" 2>/dev/null; then
+      echo "      ✅ Pod YAML retrieved: $pod" >&2
+      output_files+=("$pod_yaml")
+    else
+      echo "      ❌ Failed to retrieve YAML for pod: $pod" >&2
+    fi
+    
+    # 2. Get Pod Description
+    local pod_describe_file="${workload}_${type_safe}_pod_${pod}_describe.txt"
+    if kubectl -n "$NAMESPACE" describe pod "$pod" > "$pod_describe_file" 2>/dev/null; then
+      echo "      ✅ Pod description retrieved: $pod" >&2
+      output_files+=("$pod_describe_file")
+    else
+      echo "      ❌ Failed to retrieve description for pod: $pod" >&2
+    fi
+    
+    # 3. Process all containers for this pod (logs + nvidia-smi)
+    for container in $containers; do
+      [[ -z "$container" ]] && continue
+      ((total_containers++))
+      
+      # Get container logs
+      local log_file="${workload}_${type_safe}_pod_${pod}_logs_${container}.log"
+      if kubectl -n "$NAMESPACE" logs "$pod" -c "$container" > "$log_file" 2>/dev/null; then
+        echo "      ✅ Logs retrieved: $container (pod: $pod)" >&2
+        output_files+=("$log_file")
+      else
+        echo "      ⚠️  Failed to retrieve logs: $container (pod: $pod)" >&2
+      fi
+      
+      # Get nvidia-smi output
+      local nvidia_file="${workload}_${type_safe}_pod_${pod}_nvidia_smi_${container}.txt"
+      if kubectl -n "$NAMESPACE" exec "$pod" -c "$container" -- nvidia-smi > "$nvidia_file" 2>/dev/null; then
+        echo "      ✅ nvidia-smi retrieved: $container (pod: $pod)" >&2
+        output_files+=("$nvidia_file")
+        ((total_nvidia_files++))
+      else
+        # Clean up empty file if command failed
+        rm -f "$nvidia_file" 2>/dev/null
+      fi
+    done
+    
+  done <<< "$pods_info"
+  
+  # Summary output
+  if [[ ${#output_files[@]} -gt 0 ]]; then
+    echo "    ✅ Pod processing completed:" >&2
+    echo "      - ${total_pods} pods processed" >&2
+    echo "      - ${total_containers} containers processed" >&2
+    echo "      - ${total_nvidia_files} nvidia-smi outputs retrieved" >&2
+    echo "      - ${#output_files[@]} total files generated" >&2
+    printf '%s\n' "${output_files[@]}"
   else
-    echo "    ❌ Failed to retrieve Pod YAML (no pods found or not accessible)" >&2
+    echo "    ❌ No pod information was successfully retrieved" >&2
     return 1
   fi
 }
@@ -163,106 +259,6 @@ get_podgroup_yaml() {
   fi
 }
 
-# Function to get pod logs
-get_pod_logs() {
-  local workload="$1"
-  local type_safe="$2"
-  
-  echo "  📄 Getting Pod Logs..." >&2
-  
-  # Get all pods for this workload
-  local pods=$(kubectl -n "$NAMESPACE" get pod -l workloadName=$workload -o jsonpath='{.items[*].metadata.name}')
-  
-  if [[ -z "$pods" ]]; then
-    echo "    ⚠️  No pods found for workload: $workload" >&2
-    return 0
-  fi
-  
-  local output_files=()
-  
-  # Iterate through each pod
-  for pod in $pods; do
-    echo "    🐳 Processing pod: $pod" >&2
-    
-    # Get all containers (including init containers) for this pod
-    local containers=$(kubectl -n "$NAMESPACE" get pod "$pod" -o jsonpath='{.spec.initContainers[*].name} {.spec.containers[*].name}')
-    
-    # Iterate through each container
-    for container in $containers; do
-      local log_file="${workload}_${type_safe}_pod_logs_${container}.log"
-      echo "      📝 Getting logs for container: $container" >&2
-      
-      kubectl -n "$NAMESPACE" logs "$pod" -c "$container" > "$log_file" 2>/dev/null
-      if [[ $? -eq 0 ]]; then
-        echo "        ✅ Container logs retrieved: $container" >&2
-        output_files+=("$log_file")
-      else
-        echo "        ❌ Failed to retrieve logs for container: $container" >&2
-      fi
-    done
-  done
-  
-  if [[ ${#output_files[@]} -gt 0 ]]; then
-    echo "    ✅ Pod logs retrieved for ${#output_files[@]} containers" >&2
-    printf '%s\n' "${output_files[@]}"
-  else
-    echo "    ❌ No container logs were successfully retrieved" >&2
-    return 1
-  fi
-}
-
-# Function to get nvidia-smi output from containers
-get_nvidia_smi_output() {
-  local workload="$1"
-  local type_safe="$2"
-  
-  echo "  📄 Getting nvidia-smi output from containers..." >&2
-  
-  # Get all pods for this workload
-  local pods=$(kubectl -n "$NAMESPACE" get pod -l workloadName=$workload -o jsonpath='{.items[*].metadata.name}' 2>/dev/null)
-  
-  if [[ -z "$pods" ]]; then
-    echo "    ⚠️  No pods found for workload: $workload" >&2
-    return 1
-  fi
-  
-  local output_files=()
-  local found_nvidia=false
-  
-  # Iterate through each pod
-  for pod in $pods; do
-    echo "    🐳 Processing pod: $pod" >&2
-    
-    # Get all containers (including init containers) for this pod
-    local containers=$(kubectl -n "$NAMESPACE" get pod "$pod" -o jsonpath='{.spec.initContainers[*].name} {.spec.containers[*].name}' 2>/dev/null)
-    
-    # Iterate through each container
-    for container in $containers; do
-      local nvidia_file="${workload}_${type_safe}_nvidia_smi_${container}.txt"
-      echo "      🔍 Checking nvidia-smi in container: $container" >&2
-      
-      # Try to run nvidia-smi in the container
-      if kubectl -n "$NAMESPACE" exec "$pod" -c "$container" -- nvidia-smi > "$nvidia_file" 2>/dev/null; then
-        echo "        ✅ nvidia-smi output retrieved: $container" >&2
-        output_files+=("$nvidia_file")
-        found_nvidia=true
-      else
-        # Clean up empty file if command failed
-        rm -f "$nvidia_file" 2>/dev/null
-        echo "        ⚠️  nvidia-smi not available or failed in container: $container" >&2
-      fi
-    done
-  done
-  
-  if [[ "$found_nvidia" == true ]]; then
-    echo "    ✅ nvidia-smi output retrieved from ${#output_files[@]} containers" >&2
-    printf '%s\n' "${output_files[@]}"
-  else
-    echo "    ⚠️  No nvidia-smi output was successfully retrieved (GPU may not be available or nvidia-smi not installed)" >&2
-    return 1
-  fi
-}
-
 # Function to get KSVC YAML (for inference workloads)
 get_ksvc_yaml() {
   local workload="$1"
@@ -275,22 +271,6 @@ get_ksvc_yaml() {
     echo "$ksvc_spec"
   else
     echo "    ❌ Failed to retrieve KSVC YAML (resource may not exist or be accessible)" >&2
-    return 1
-  fi
-}
-
-# Function to get pod descriptions for all pods in namespace
-get_all_pods_describe() {
-  local workload="$1"
-  local type_safe="$2"
-  
-  local pod_describe_file="${workload}_${type_safe}_all_pods_describe.txt"
-  echo "  📄 Getting pod descriptions for all pods in namespace..." >&2
-  if kubectl -n "$NAMESPACE" describe pods > "$pod_describe_file" 2>/dev/null; then
-    echo "    ✅ Pod descriptions retrieved" >&2
-    echo "$pod_describe_file"
-  else
-    echo "    ❌ Failed to retrieve pod descriptions (no pods found or not accessible)" >&2
     return 1
   fi
 }
@@ -386,9 +366,23 @@ if runaijob_yaml=$(get_runaijob_yaml "$WORKLOAD" "$TYPE_SAFE"); then
   OUTPUT_FILES+=("$runaijob_yaml")
 fi
 
-# Get pod YAML
-if pod_yaml=$(get_pod_yaml "$WORKLOAD" "$TYPE_SAFE"); then
-  OUTPUT_FILES+=("$pod_yaml")
+# Centralized pod and container discovery (OPTIMIZATION: single kubectl call)
+echo "  🔍 Discovering pods and containers..." >&2
+PODS_INFO=$(get_pods_and_containers_info "$WORKLOAD")
+if [[ $? -eq 0 && -n "$PODS_INFO" ]]; then
+  echo "    ✅ Pod and container information discovered" >&2
+  
+  # Process all pod operations in unified manner (MAJOR OPTIMIZATION)
+  if pod_output=$(process_pods_unified "$WORKLOAD" "$TYPE_SAFE" "$PODS_INFO"); then
+    # Add each file to the output files array
+    while IFS= read -r output_file; do
+      if [[ -n "$output_file" ]]; then
+        OUTPUT_FILES+=("$output_file")
+      fi
+    done <<< "$pod_output"
+  fi
+else
+  echo "    ⚠️  No pods found for workload or discovery failed. Skipping pod-related operations." >&2
 fi
 
 # Get podgroup YAML
@@ -396,36 +390,11 @@ if podgroup_yaml=$(get_podgroup_yaml "$WORKLOAD" "$TYPE_SAFE"); then
   OUTPUT_FILES+=("$podgroup_yaml")
 fi
 
-# Get pod logs
-if pod_logs_output=$(get_pod_logs "$WORKLOAD" "$TYPE_SAFE"); then
-  # Add each log file to the output files array
-  while IFS= read -r log_file; do
-    if [[ -n "$log_file" ]]; then
-      OUTPUT_FILES+=("$log_file")
-    fi
-  done <<< "$pod_logs_output"
-fi
-
-# Get nvidia-smi output from containers
-if nvidia_smi_output=$(get_nvidia_smi_output "$WORKLOAD" "$TYPE_SAFE"); then
-  # Add each nvidia-smi file to the output files array
-  while IFS= read -r nvidia_file; do
-    if [[ -n "$nvidia_file" ]]; then
-      OUTPUT_FILES+=("$nvidia_file")
-    fi
-  done <<< "$nvidia_smi_output"
-fi
-
 # Get ksvc for inference workloads
 if [[ "$CANONICAL_TYPE" == "inferenceworkloads" ]]; then
   if ksvc_spec=$(get_ksvc_yaml "$WORKLOAD" "$TYPE_SAFE"); then
     OUTPUT_FILES+=("$ksvc_spec")
   fi
-fi
-
-# Get pod descriptions for all pods in namespace
-if pod_describe_output=$(get_all_pods_describe "$WORKLOAD" "$TYPE_SAFE"); then
-  OUTPUT_FILES+=("$pod_describe_output")
 fi
 
 # Get pod list for all pods in namespace
@@ -470,10 +439,8 @@ if tar -czf "$ARCHIVE" "${OUTPUT_FILES[@]}" 2>/dev/null; then
   for file in "${OUTPUT_FILES[@]}"; do
     if [[ -f "$file" ]]; then
       rm "$file"
-      echo "  🗑️  Deleted: $file"
     fi
   done
-  echo ""
   echo "✅ Cleanup completed. Only archive remains: $ARCHIVE"
 else
   echo "  ❌ Failed to create archive. Individual files preserved."
@@ -483,3 +450,4 @@ else
   done
   exit 1
 fi
+
