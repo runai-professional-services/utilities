@@ -89,10 +89,10 @@ main() {
     cd "${ARCHIVE_NAME}"
     
     # Dump all resource types
-    dump_resource "projects" "project"
-    dump_resource "queues" "queue"
-    dump_resource "nodepools" "nodepool"
-    dump_resource "departments" "department"
+    dump_resource "projects.run.ai" "project"
+    dump_resource "queues.scheduling.run.ai" "queue"
+    dump_resource "nodepools.run.ai" "nodepool"
+    dump_resource "departments.scheduling.run.ai" "department"
     
     # Go back to parent directory
     cd ..
