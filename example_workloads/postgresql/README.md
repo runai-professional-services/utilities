@@ -1,5 +1,7 @@
 # PostgreSQL Database as RunAI Workload
 
+> **⚠️ DISCLAIMER**: RunAI workloads are not intended for running production database instances like PostgreSQL. This is **not a best practice** for database deployment. Databases should typically be deployed using dedicated database services, operators, or stateful workload management systems. This example is provided for educational, testing, or development purposes only. **Proceed at your own risk** and do not use this approach for production workloads.
+
 This folder contains examples and instructions for running a PostgreSQL database as a RunAI workload. It provides two deployment approaches: declarative YAML configuration and CLI commands.
 
 **Prerequisites**: This example assumes you are working with the RunAI project `mockdb`, which uses the corresponding namespace `runai-mockdb`.
