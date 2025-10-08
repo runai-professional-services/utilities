@@ -1,0 +1,37 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: postgres-init-script
+  namespace: runai-mockdb
+data:
+  init.sh: |
+    #!/bin/bash
+    set -e
+    
+    # Create the application database
+    psql -v ON_ERROR_STOP=1 --username "$POSTGRES_USER" --dbname "$POSTGRES_DB" <<-EOSQL
+      CREATE DATABASE myapp_db;
+      CREATE USER appuser WITH PASSWORD '$APPUSER_PASSWORD';
+      GRANT ALL PRIVILEGES ON DATABASE myapp_db TO appuser;
+    EOSQL
+    
+    # Connect to the new database to create tables and data
+    psql -v ON_ERROR_STOP=1 --username "$POSTGRES_USER" --dbname "myapp_db" <<-EOSQL
+      CREATE TABLE IF NOT EXISTS users (
+          id SERIAL PRIMARY KEY,
+          username VARCHAR(50) UNIQUE NOT NULL,
+          email VARCHAR(100) UNIQUE NOT NULL,
+          created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+      );
+      
+      INSERT INTO users (username, email) VALUES
+      ('alice', 'alice@example.com'),
+      ('bob', 'bob@example.com')
+      ON CONFLICT (username) DO NOTHING;
+      
+      CREATE USER readonlyuser WITH PASSWORD '$READONLYUSER_PASSWORD';
+      GRANT CONNECT ON DATABASE myapp_db TO readonlyuser;
+      GRANT SELECT ON ALL TABLES IN SCHEMA public TO readonlyuser;
+      ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT SELECT ON TABLES TO readonlyuser;
+    EOSQL
+

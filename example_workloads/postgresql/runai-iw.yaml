@@ -1,0 +1,75 @@
+apiVersion: run.ai/v2alpha1
+kind: InteractiveWorkload
+metadata:
+  name: postgres-deployment
+  namespace: runai-mockdb
+  labels:
+    app: mockdb-postgres
+spec:
+  usage: Submit
+  
+  # Container configuration
+  image:
+    value: "postgres:13"
+  
+  imagePullPolicy:
+    value: Always
+  
+  # Resource configuration
+  memory:
+    value: "256Mi"
+  
+  memoryLimit:
+    value: "1Gi"
+  
+  cpu:
+    value: "0.25"
+  
+  cpuLimit:
+    value: "1"
+  
+  # Environment variables from the original deployment
+  environment:
+    items:
+      PGDATA:
+        value: "/var/lib/postgresql/data/pgdata"
+      POSTGRES_DB:
+        value: "postgres"
+      POSTGRES_USER:
+        value: "postgres"
+      POSTGRES_PASSWORD:
+        value: "SECRET:postgres-secrets,POSTGRES_PASSWORD"
+      APPUSER_PASSWORD:
+        value: "SECRET:postgres-secrets,APPUSER_PASSWORD"
+      READONLYUSER_PASSWORD:
+        value: "SECRET:postgres-secrets,READONLYUSER_PASSWORD"
+  
+  # Port configuration (from the service)
+  ports:
+    items:
+      postgres-port:
+        value:
+          container: 5432
+          external: 5432
+  
+  # Service type configuration
+  serviceType:
+    value: ClusterIP
+  
+  # Volume mounts
+  pvcs:
+    items:
+      postgres-storage:
+        value:
+          path: /var/lib/postgresql/data
+          claimName: postgres-data-pvc
+          existingPvc: true
+          readOnly: false
+  
+  # ConfigMap volume for init script
+  configMapVolumes:
+    items:
+      init-script-volume:
+        value:
+          name: postgres-init-script
+          mountPath: /docker-entrypoint-initdb.d
