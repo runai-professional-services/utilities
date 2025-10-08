@@ -1,5 +1,8 @@
 #!/bin/bash
 
+# Global variable to store the kubectl command (kubectl or oc)
+KUBECTL_CMD=""
+
 # Function to check if a command exists
 check_command() {
   local cmd=$1
@@ -7,6 +10,50 @@ check_command() {
     echo "ERROR: '$cmd' command not found. Please install $cmd and try again."
     exit 1
   fi
+}
+
+# Function to detect if this is an OpenShift cluster
+detect_openshift() {
+  echo "Detecting cluster type..."
+  
+  # First check if oc command is available
+  if command -v "oc" &> /dev/null; then
+    # Try to detect OpenShift-specific resources
+    if oc api-resources --api-group=config.openshift.io &> /dev/null; then
+      echo "✓ OpenShift cluster detected"
+      KUBECTL_CMD="oc"
+      return 0
+    fi
+    
+    # Alternative check: look for OpenShift-specific API groups
+    if oc api-versions | grep -q "config.openshift.io\|operator.openshift.io\|route.openshift.io" 2>/dev/null; then
+      echo "✓ OpenShift cluster detected"
+      KUBECTL_CMD="oc"
+      return 0
+    fi
+  fi
+  
+  # If oc is not available or OpenShift not detected, check if kubectl works
+  if command -v "kubectl" &> /dev/null; then
+    # Double-check by trying to detect OpenShift APIs with kubectl
+    if kubectl api-versions | grep -q "config.openshift.io\|operator.openshift.io\|route.openshift.io" 2>/dev/null; then
+      echo "✓ OpenShift cluster detected (using kubectl)"
+      KUBECTL_CMD="kubectl"
+      return 0
+    fi
+    
+    echo "✓ Standard Kubernetes cluster detected"
+    KUBECTL_CMD="kubectl"
+    return 0
+  fi
+  
+  echo "ERROR: Neither 'kubectl' nor 'oc' command found. Please install one of them and try again."
+  exit 1
+}
+
+# Function to execute kubectl/oc commands
+k8s_cmd() {
+  $KUBECTL_CMD "$@"
 }
 
 # Function to collect logs for a given namespace and output directory
@@ -17,7 +64,7 @@ collect_logs() {
   mkdir -p "$LOGS_SUBDIR"
   
   echo "  Collecting pod information for namespace: $NAMESPACE"
-  PODS=$(kubectl get pods -n $NAMESPACE -o jsonpath='{.items[*].metadata.name}')
+  PODS=$(k8s_cmd get pods -n $NAMESPACE -o jsonpath='{.items[*].metadata.name}')
   
   if [ -z "$PODS" ]; then
     echo "  No pods found in namespace: $NAMESPACE"
@@ -30,18 +77,18 @@ collect_logs() {
     echo "  Processing pod: $POD"
     
     # Get regular containers
-    CONTAINERS=$(kubectl get pod $POD -n $NAMESPACE -o jsonpath='{.spec.containers[*].name}')
+    CONTAINERS=$(k8s_cmd get pod $POD -n $NAMESPACE -o jsonpath='{.spec.containers[*].name}')
     echo "    Regular containers found: $(echo $CONTAINERS | wc -w)"
     
     # Get init containers
-    INIT_CONTAINERS=$(kubectl get pod $POD -n $NAMESPACE -o jsonpath='{.spec.initContainers[*].name}')
+    INIT_CONTAINERS=$(k8s_cmd get pod $POD -n $NAMESPACE -o jsonpath='{.spec.initContainers[*].name}')
     echo "    Init containers found: $(echo $INIT_CONTAINERS | wc -w)"
     
     # Collect logs for regular containers
     for CONTAINER in $CONTAINERS; do
       LOG_FILE="$LOGS_SUBDIR/${POD}_${CONTAINER}.log"
       echo "    Collecting logs for Pod: $POD, Container: $CONTAINER"
-      kubectl logs --timestamps $POD -c $CONTAINER -n $NAMESPACE > "$LOG_FILE" 2>/dev/null
+      k8s_cmd logs --timestamps $POD -c $CONTAINER -n $NAMESPACE > "$LOG_FILE" 2>/dev/null
       if [ $? -eq 0 ]; then
         echo "      ✓ Logs saved to: $LOG_FILE"
       else
@@ -53,7 +100,7 @@ collect_logs() {
     for CONTAINER in $INIT_CONTAINERS; do
       LOG_FILE="$LOGS_SUBDIR/${POD}_${CONTAINER}_init.log"
       echo "    Collecting logs for Pod: $POD, Init Container: $CONTAINER"
-      kubectl logs --timestamps $POD -c $CONTAINER -n $NAMESPACE > "$LOG_FILE" 2>/dev/null
+      k8s_cmd logs --timestamps $POD -c $CONTAINER -n $NAMESPACE > "$LOG_FILE" 2>/dev/null
       if [ $? -eq 0 ]; then
         echo "      ✓ Init container logs saved to: $LOG_FILE"
       else
@@ -63,9 +110,12 @@ collect_logs() {
   done
 }
 
+# Detect cluster type and set appropriate command
+detect_openshift
+
 # Check for required tools
 echo "Checking for required tools..."
-check_command "kubectl"
+echo "✓ Kubernetes CLI: $KUBECTL_CMD"
 check_command "helm"
 echo "✓ All required tools are available"
 echo ""
@@ -74,8 +124,8 @@ echo ""
 NAMESPACES=("runai-backend" "runai")
 
 echo "Extracting cluster information..."
-CLUSTER_URL=$(kubectl -n runai get runaiconfig runai -o jsonpath='{.spec.__internal.global.clusterURL}' 2>/dev/null)
-CP_URL=$(kubectl -n runai get runaiconfig runai -o jsonpath='{.spec.__internal.global.controlPlane.url}' 2>/dev/null)
+CLUSTER_URL=$(k8s_cmd -n runai get runaiconfig runai -o jsonpath='{.spec.__internal.global.clusterURL}' 2>/dev/null)
+CP_URL=$(k8s_cmd -n runai get runaiconfig runai -o jsonpath='{.spec.__internal.global.controlPlane.url}' 2>/dev/null)
 
 if [ -z "$CLUSTER_URL" ]; then
   echo "⚠ Warning: Could not extract Cluster URL"
@@ -101,7 +151,7 @@ for NAMESPACE in "${NAMESPACES[@]}"; do
   
   # Check namespace existence before any operations
   echo "Checking if namespace '$NAMESPACE' exists..."
-  kubectl get namespace "$NAMESPACE" >/dev/null 2>&1
+  k8s_cmd get namespace "$NAMESPACE" >/dev/null 2>&1
   if [ $? -ne 0 ]; then
     echo "❌ Namespace '$NAMESPACE' does not exist. Skipping."
     continue
@@ -146,28 +196,28 @@ for NAMESPACE in "${NAMESPACES[@]}"; do
       echo "  ✓ Helm values saved"
       
       echo "Collecting ConfigMap runai-public..."
-      kubectl -n runai get cm runai-public -o yaml > "$LOG_DIR/cm_runai-public.yaml" 2>/dev/null
+      k8s_cmd -n runai get cm runai-public -o yaml > "$LOG_DIR/cm_runai-public.yaml" 2>/dev/null
       echo "  ✓ ConfigMap saved"
       
       echo "Collecting pod list for runai namespace..."
-      kubectl -n runai get pods -o wide > "$LOG_DIR/pod-list_runai.txt" 2>/dev/null
+      k8s_cmd -n runai get pods -o wide > "$LOG_DIR/pod-list_runai.txt" 2>/dev/null
       echo "  ✓ Pod list saved"
       
       echo "Collecting node list..."
-      kubectl get nodes -o wide > "$LOG_DIR/node-list.txt" 2>/dev/null
+      k8s_cmd get nodes -o wide > "$LOG_DIR/node-list.txt" 2>/dev/null
       echo "  ✓ Node list saved"
       
       echo "Collecting RunAI config..."
-      kubectl -n runai get runaiconfig runai -o yaml > "$LOG_DIR/runaiconfig.yaml" 2>/dev/null
+      k8s_cmd -n runai get runaiconfig runai -o yaml > "$LOG_DIR/runaiconfig.yaml" 2>/dev/null
       echo "  ✓ RunAI config saved"
       
       echo "Collecting engine config..."
-      kubectl -n runai get configs.engine.run.ai engine-config -o yaml > "$LOG_DIR/engine-config.yaml" 2>/dev/null
+      k8s_cmd -n runai get configs.engine.run.ai engine-config -o yaml > "$LOG_DIR/engine-config.yaml" 2>/dev/null
       echo "  ✓ Engine config saved"
       
     elif [ "$NAMESPACE" == "runai-backend" ]; then
       echo "Collecting pod list for runai-backend namespace..."
-      kubectl -n runai-backend get pods -o wide > "$LOG_DIR/pod-list_runai-backend.txt" 2>/dev/null
+      k8s_cmd -n runai-backend get pods -o wide > "$LOG_DIR/pod-list_runai-backend.txt" 2>/dev/null
       echo "  ✓ Pod list saved"
       
       echo "Collecting Helm values for runai-backend..."
