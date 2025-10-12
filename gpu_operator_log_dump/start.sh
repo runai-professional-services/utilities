@@ -65,6 +65,16 @@ kubectl get configmaps -n gpu-operator -o yaml > gpu-operator-configmaps.yaml 2>
 kubectl get secrets -n gpu-operator > gpu-operator-secrets.txt 2>&1
 kubectl get daemonsets -n gpu-operator -o yaml > gpu-operator-daemonsets.yaml 2>&1
 
+# Collect GPU Operator Helm values
+echo "Collecting GPU Operator Helm values..."
+GPU_OPERATOR_RELEASE_NAME=$(helm -n gpu-operator ls -o json | jq -r '.[].name' 2>/dev/null)
+if [ -n "$GPU_OPERATOR_RELEASE_NAME" ]; then
+    helm -n gpu-operator get values $GPU_OPERATOR_RELEASE_NAME > gpu_operator_helm_values.yaml 2>&1
+    echo "  - Collected Helm values for release: $GPU_OPERATOR_RELEASE_NAME"
+else
+    echo "  - No Helm release found in gpu-operator namespace" > gpu_operator_helm_values.yaml
+fi
+
 # Create a summary file
 echo "Creating summary..."
 cat > collection-summary.txt << EOF
