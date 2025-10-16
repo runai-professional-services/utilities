@@ -123,10 +123,18 @@ get_runaijob_yaml() {
   local runaijob_yaml="${workload}_${type_safe}_runaijob.yaml"
   echo "  📄 Getting RunAIJob YAML..." >&2
   if kubectl -n "$NAMESPACE" get rj "$workload" -o yaml > "$runaijob_yaml" 2>/dev/null; then
+    # Check if file is empty or contains no valid content
+    if [[ ! -s "$runaijob_yaml" ]]; then
+      echo "    ❌ RunAIJob resource returned empty content" >&2
+      rm -f "$runaijob_yaml" 2>/dev/null
+      return 1
+    fi
     echo "    ✅ RunAIJob YAML retrieved" >&2
     echo "$runaijob_yaml"
   else
     echo "    ❌ Failed to retrieve RunAIJob YAML (resource may not exist or be accessible)" >&2
+    # Clean up empty file if it was created
+    rm -f "$runaijob_yaml" 2>/dev/null
     return 1
   fi
 }
