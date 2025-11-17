@@ -331,6 +331,38 @@ get_all_pvcs() {
   fi
 }
 
+# Function to get all Services in namespace
+get_all_services() {
+  local workload="$1"
+  local type_safe="$2"
+  
+  local service_file="${workload}_${type_safe}_all_services.yaml"
+  echo "  📄 Getting all Services in namespace..." >&2
+  if kubectl -n "$NAMESPACE" get svc -o yaml > "$service_file" 2>/dev/null; then
+    echo "    ✅ Services retrieved" >&2
+    echo "$service_file"
+  else
+    echo "    ❌ Failed to retrieve Services (no services found or not accessible)" >&2
+    return 1
+  fi
+}
+
+# Function to get all Ingresses in namespace
+get_all_ingresses() {
+  local workload="$1"
+  local type_safe="$2"
+  
+  local ingress_file="${workload}_${type_safe}_all_ingresses.yaml"
+  echo "  📄 Getting all Ingresses in namespace..." >&2
+  if kubectl -n "$NAMESPACE" get ingress -o yaml > "$ingress_file" 2>/dev/null; then
+    echo "    ✅ Ingresses retrieved" >&2
+    echo "$ingress_file"
+  else
+    echo "    ❌ Failed to retrieve Ingresses (no ingresses found or not accessible)" >&2
+    return 1
+  fi
+}
+
 # Arguments have already been parsed and validated above
 
 # Lookup namespace from project
@@ -418,6 +450,16 @@ fi
 # Get all PVCs in namespace
 if pvc_output=$(get_all_pvcs "$WORKLOAD" "$TYPE_SAFE"); then
   OUTPUT_FILES+=("$pvc_output")
+fi
+
+# Get all Services in namespace
+if service_output=$(get_all_services "$WORKLOAD" "$TYPE_SAFE"); then
+  OUTPUT_FILES+=("$service_output")
+fi
+
+# Get all Ingresses in namespace
+if ingress_output=$(get_all_ingresses "$WORKLOAD" "$TYPE_SAFE"); then
+  OUTPUT_FILES+=("$ingress_output")
 fi
 
 echo ""
