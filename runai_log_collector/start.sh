@@ -121,7 +121,7 @@ echo "✓ All required tools are available"
 echo ""
 
 # Namespaces to check
-NAMESPACES=("runai-backend" "runai")
+NAMESPACES=("runai-backend" "runai" "knative-serving" "knative-operator")
 
 echo "Extracting cluster information..."
 CLUSTER_URL=$(k8s_cmd -n runai get runaiconfig runai -o jsonpath='{.spec.__internal.global.clusterURL}' 2>/dev/null)
@@ -197,7 +197,15 @@ for NAMESPACE in "${NAMESPACES[@]}"; do
       
       echo "Collecting ConfigMap runai-public..."
       k8s_cmd -n runai get cm runai-public -o yaml > "$LOG_DIR/cm_runai-public.yaml" 2>/dev/null
-      echo "  ✓ ConfigMap saved"
+      echo "  ✓ ConfigMap runai-public saved"
+      
+      echo "Collecting all ConfigMaps..."
+      k8s_cmd -n runai get cm -o yaml > "$LOG_DIR/configmaps_runai.yaml" 2>/dev/null
+      echo "  ✓ All ConfigMaps saved"
+      
+      echo "Collecting all Secrets..."
+      k8s_cmd -n runai get secrets -o yaml > "$LOG_DIR/secrets_runai.yaml" 2>/dev/null
+      echo "  ✓ All Secrets saved"
       
       echo "Collecting pod list for runai namespace..."
       k8s_cmd -n runai get pods -o wide > "$LOG_DIR/pod-list_runai.txt" 2>/dev/null
@@ -223,6 +231,103 @@ for NAMESPACE in "${NAMESPACES[@]}"; do
       echo "Collecting Helm values for runai-backend..."
       helm -n runai-backend get values runai-backend > "$LOG_DIR/helm-values_runai-backend.yaml" 2>/dev/null
       echo "  ✓ Helm values saved"
+      
+      echo "Collecting all ConfigMaps..."
+      k8s_cmd -n runai-backend get cm -o yaml > "$LOG_DIR/configmaps_runai-backend.yaml" 2>/dev/null
+      echo "  ✓ All ConfigMaps saved"
+      
+      echo "Collecting all Secrets..."
+      k8s_cmd -n runai-backend get secrets -o yaml > "$LOG_DIR/secrets_runai-backend.yaml" 2>/dev/null
+      echo "  ✓ All Secrets saved"
+      
+    elif [ "$NAMESPACE" == "knative-serving" ]; then
+      echo "Collecting pod list for knative-serving namespace..."
+      k8s_cmd -n knative-serving get pods -o wide > "$LOG_DIR/pod-list_knative-serving.txt" 2>/dev/null
+      echo "  ✓ Pod list saved"
+      
+      echo "Collecting all ConfigMaps..."
+      k8s_cmd -n knative-serving get cm -o yaml > "$LOG_DIR/configmaps_knative-serving.yaml" 2>/dev/null
+      echo "  ✓ ConfigMaps saved"
+      
+      echo "Collecting all Secrets..."
+      k8s_cmd -n knative-serving get secrets -o yaml > "$LOG_DIR/secrets_knative-serving.yaml" 2>/dev/null
+      echo "  ✓ Secrets saved"
+      
+      echo "Collecting KnativeServing object..."
+      k8s_cmd -n knative-serving get knativeserving knative-serving -o yaml > "$LOG_DIR/knativeserving.yaml" 2>/dev/null
+      if [ $? -eq 0 ]; then
+        echo "  ✓ KnativeServing object saved"
+      else
+        echo "  ⚠ Warning: Could not retrieve KnativeServing object (may not exist or have different name)"
+        # Try to get any knativeserving objects
+        k8s_cmd -n knative-serving get knativeserving -o yaml > "$LOG_DIR/knativeserving_all.yaml" 2>/dev/null
+      fi
+      
+      echo "Collecting Knative Services..."
+      k8s_cmd -n knative-serving get services.serving.knative.dev -o yaml > "$LOG_DIR/knative-services.yaml" 2>/dev/null
+      echo "  ✓ Knative Services saved"
+      
+      echo "Collecting Knative Revisions..."
+      k8s_cmd -n knative-serving get revisions.serving.knative.dev -o yaml > "$LOG_DIR/knative-revisions.yaml" 2>/dev/null
+      echo "  ✓ Knative Revisions saved"
+      
+      echo "Collecting Knative Routes..."
+      k8s_cmd -n knative-serving get routes.serving.knative.dev -o yaml > "$LOG_DIR/knative-routes.yaml" 2>/dev/null
+      echo "  ✓ Knative Routes saved"
+      
+      echo "Collecting Knative Configurations..."
+      k8s_cmd -n knative-serving get configurations.serving.knative.dev -o yaml > "$LOG_DIR/knative-configurations.yaml" 2>/dev/null
+      echo "  ✓ Knative Configurations saved"
+      
+      echo "Collecting DomainMappings..."
+      k8s_cmd -n knative-serving get domainmappings.serving.knative.dev -o yaml > "$LOG_DIR/knative-domainmappings.yaml" 2>/dev/null
+      echo "  ✓ DomainMappings saved"
+      
+      echo "Collecting namespace events..."
+      k8s_cmd -n knative-serving get events --sort-by='.lastTimestamp' > "$LOG_DIR/events_knative-serving.txt" 2>/dev/null
+      echo "  ✓ Events saved"
+      
+      echo "Collecting Knative Webhook Configurations..."
+      # Get mutating webhook configurations with knative in the name
+      MUTATING_WEBHOOKS=$(k8s_cmd get mutatingwebhookconfigurations -o name 2>/dev/null | grep -i knative)
+      if [ -n "$MUTATING_WEBHOOKS" ]; then
+        echo "$MUTATING_WEBHOOKS" | while read webhook; do
+          k8s_cmd get "$webhook" -o yaml >> "$LOG_DIR/mutatingwebhooks_knative.yaml" 2>/dev/null
+          echo "---" >> "$LOG_DIR/mutatingwebhooks_knative.yaml"
+        done
+        echo "  ✓ Mutating Webhook Configurations saved"
+      else
+        echo "  ⚠ No Knative Mutating Webhook Configurations found"
+      fi
+      
+      # Get validating webhook configurations with knative in the name
+      VALIDATING_WEBHOOKS=$(k8s_cmd get validatingwebhookconfigurations -o name 2>/dev/null | grep -i knative)
+      if [ -n "$VALIDATING_WEBHOOKS" ]; then
+        echo "$VALIDATING_WEBHOOKS" | while read webhook; do
+          k8s_cmd get "$webhook" -o yaml >> "$LOG_DIR/validatingwebhooks_knative.yaml" 2>/dev/null
+          echo "---" >> "$LOG_DIR/validatingwebhooks_knative.yaml"
+        done
+        echo "  ✓ Validating Webhook Configurations saved"
+      else
+        echo "  ⚠ No Knative Validating Webhook Configurations found"
+      fi
+      
+    elif [ "$NAMESPACE" == "knative-operator" ]; then
+      echo "Collecting pod list for knative-operator namespace..."
+      k8s_cmd -n knative-operator get pods -o wide > "$LOG_DIR/pod-list_knative-operator.txt" 2>/dev/null
+      echo "  ✓ Pod list saved"
+      
+      echo "Collecting all ConfigMaps..."
+      k8s_cmd -n knative-operator get cm -o yaml > "$LOG_DIR/configmaps_knative-operator.yaml" 2>/dev/null
+      echo "  ✓ ConfigMaps saved"
+      
+      echo "Collecting all Secrets..."
+      k8s_cmd -n knative-operator get secrets -o yaml > "$LOG_DIR/secrets_knative-operator.yaml" 2>/dev/null
+      echo "  ✓ Secrets saved"
+      
+      echo "Collecting namespace events..."
+      k8s_cmd -n knative-operator get events --sort-by='.lastTimestamp' > "$LOG_DIR/events_knative-operator.txt" 2>/dev/null
+      echo "  ✓ Events saved"
     fi
 
     echo ""

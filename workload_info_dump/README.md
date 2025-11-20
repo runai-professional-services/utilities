@@ -1,6 +1,6 @@
-# Workload Info Dump v2.3.0
+# Workload Info Dump v2.4.0
 
-Efficiently collects and archives Run:AI workload information with optimized per-pod resource gathering.
+Collects and archives Run:AI workload diagnostics into a single timestamped archive.
 
 ## Usage
 
@@ -8,46 +8,43 @@ Efficiently collects and archives Run:AI workload information with optimized per
 ./start.sh --project <PROJECT> --type <TYPE> --workload <WORKLOAD>
 ```
 
-### Parameters
-- **PROJECT**: Run:AI project name
-- **WORKLOAD**: Workload name  
-- **TYPE**: Workload type - `iw`, `tw`, `dw`, `infw`, `dinfw`, `ew`
+**Parameters:**
+- `--project` - Run:AI project name
+- `--workload` - Workload name
+- `--type` - Workload type: `tw`, `iw`, `dw`, `infw`, `dinfw`, `ew`
 
-### Example
+**Example:**
 ```sh
-./start.sh --project test --type dw --workload my-training
+./start.sh --project ml-team --type dw --workload bert-training
 ```
 
-## What it collects
+## Resources Collected
 
-**Per-pod files (organized by pod name):**
-- Pod YAML manifests
-- Pod descriptions  
-- Container logs
-- nvidia-smi output (if available)
-
-**Workload-level files:**
-- Workload YAML (DistributedWorkload, TrainingWorkload, etc.)
+### Workload Resources
+- Workload YAML (TrainingWorkload, DistributedWorkload, etc.)
 - RunAIJob YAML
 - PodGroup YAML
 - KSVC YAML (inference workloads only)
 
-**Namespace-level files:**
-- Pod list (wide format)
-- ConfigMaps
-- PVCs
+### Pod Resources (per pod)
+- Pod YAML manifest
+- Pod describe output
+- Container logs (all containers)
+- nvidia-smi output (when available)
+
+### Namespace Resources
+- All Pods (list with wide output)
+- All ConfigMaps
+- All PVCs
+- All Services
+- All Ingresses
+- All Routes (OpenShift)
 
 ## Output
 
-Creates timestamped archive: `<PROJECT>_<TYPE>_<WORKLOAD>_v<VERSION>_<TIMESTAMP>.tar.gz`
+Creates: `<PROJECT>_<TYPE>_<WORKLOAD>_v<VERSION>_<TIMESTAMP>.tar.gz`
 
-**File naming convention:**
-- Pod files: `<workload>_<type>_pod_<pod-name>_<resource>.<ext>`
-- Example: `my-training_dw_pod_worker-0_logs_pytorch.log`
-
-## Features
-
-✅ **Optimized**: Single discovery pass with unified pod processing  
-✅ **Organized**: Separate files per pod for easy analysis  
-✅ **Resilient**: Continues on individual resource failures  
-✅ **Comprehensive**: Collects all relevant Kubernetes resources
+**Features:**
+- ✅ Resilient collection (continues on individual failures)
+- ✅ Optimized pod discovery (single kubectl call)
+- ✅ Clear naming: `<workload>_<type>_<resource>.yaml`

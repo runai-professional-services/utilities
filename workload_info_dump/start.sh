@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # Workload Info Dump Script
-VERSION="2.3.0"
+VERSION="2.4.0"
 
 # Removed 'set -e' to allow script to continue when individual commands fail
 
@@ -363,6 +363,22 @@ get_all_ingresses() {
   fi
 }
 
+# Function to get all Routes in namespace (OpenShift)
+get_all_routes() {
+  local workload="$1"
+  local type_safe="$2"
+  
+  local route_file="${workload}_${type_safe}_all_routes.yaml"
+  echo "  📄 Getting all Routes in namespace..." >&2
+  if kubectl -n "$NAMESPACE" get route -o yaml > "$route_file" 2>/dev/null; then
+    echo "    ✅ Routes retrieved" >&2
+    echo "$route_file"
+  else
+    echo "    ❌ Failed to retrieve Routes (no routes found or not accessible)" >&2
+    return 1
+  fi
+}
+
 # Arguments have already been parsed and validated above
 
 # Lookup namespace from project
@@ -460,6 +476,11 @@ fi
 # Get all Ingresses in namespace
 if ingress_output=$(get_all_ingresses "$WORKLOAD" "$TYPE_SAFE"); then
   OUTPUT_FILES+=("$ingress_output")
+fi
+
+# Get all Routes in namespace (OpenShift)
+if route_output=$(get_all_routes "$WORKLOAD" "$TYPE_SAFE"); then
+  OUTPUT_FILES+=("$route_output")
 fi
 
 echo ""
