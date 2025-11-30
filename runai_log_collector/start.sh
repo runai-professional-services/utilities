@@ -76,6 +76,16 @@ collect_logs() {
   for POD in $PODS; do
     echo "  Processing pod: $POD"
     
+    # Collect pod description
+    DESCRIBE_FILE="$LOGS_SUBDIR/${POD}_describe.txt"
+    echo "    Collecting pod description for: $POD"
+    k8s_cmd describe pod $POD -n $NAMESPACE > "$DESCRIBE_FILE" 2>/dev/null
+    if [ $? -eq 0 ]; then
+      echo "      ✓ Pod description saved to: $DESCRIBE_FILE"
+    else
+      echo "      ⚠ Warning: Failed to collect pod description for: $POD"
+    fi
+    
     # Get regular containers
     CONTAINERS=$(k8s_cmd get pod $POD -n $NAMESPACE -o jsonpath='{.spec.containers[*].name}')
     echo "    Regular containers found: $(echo $CONTAINERS | wc -w)"
