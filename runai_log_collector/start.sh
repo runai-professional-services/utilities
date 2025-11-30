@@ -222,8 +222,12 @@ for NAMESPACE in "${NAMESPACES[@]}"; do
       echo "  ✓ Pod list saved"
       
       echo "Collecting node list..."
-      k8s_cmd get nodes "-o=custom-columns=NAME:.metadata.name,CPUs:.status.capacity.cpu,RAM:.status.capacity.memory,GPU-cap:.status.capacity.nvidia\.com\/gpu,GPU-aloc:.status.allocatable.nvidia\.com\/gpu,GPU-type:.metadata.labels.nvidia\.com\/gpu\.product,OS:.status.nodeInfo.osImage,K8S:.status.nodeInfo.kubeletVersion,RUNTIME:.status.nodeInfo.containerRuntimeVersion" > "$LOG_DIR/node-list.txt" 2>/dev/null
+      k8s_cmd get nodes -o wide > "$LOG_DIR/node-list.txt" 2>/dev/null
       echo "  ✓ Node list saved"
+      
+      echo "Collecting detailed node information..."
+      k8s_cmd get nodes "-o=custom-columns=NAME:.metadata.name,CPUs:.status.capacity.cpu,RAM:.status.capacity.memory,GPU-cap:.status.capacity.nvidia\.com\/gpu,GPU-aloc:.status.allocatable.nvidia\.com\/gpu,GPU-type:.metadata.labels.nvidia\.com\/gpu\.product,OS:.status.nodeInfo.osImage,K8S:.status.nodeInfo.kubeletVersion,RUNTIME:.status.nodeInfo.containerRuntimeVersion" > "$LOG_DIR/node-list-detailed.txt" 2>/dev/null
+      echo "  ✓ Detailed node information saved"
       
       echo "Collecting RunAI config..."
       k8s_cmd -n runai get runaiconfig runai -o yaml > "$LOG_DIR/runaiconfig.yaml" 2>/dev/null
