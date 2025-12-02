@@ -11,17 +11,37 @@ NC='\033[0m' # No Color
 POD_NAME="gpu-test"
 NAMESPACE="${NAMESPACE:-default}"
 TIMEOUT="${TIMEOUT:-300}"
+GPU_IMAGE="${GPU_IMAGE:-nvidia/cuda:11.8.0-base-ubuntu22.04}"
 OUTPUT_DIR="gpu-test-results-$(date +%Y%m%d-%H%M%S)"
 ARCHIVE_NAME="${OUTPUT_DIR}.tar.gz"
+TEMP_YAML="/tmp/gpu-test-${RANDOM}.yaml"
 
 echo -e "${GREEN}=== GPU Simple Test Script ===${NC}"
 echo "Pod Name: $POD_NAME"
 echo "Namespace: $NAMESPACE"
 echo "Timeout: ${TIMEOUT}s"
+echo "GPU Image: $GPU_IMAGE"
 echo ""
 
 # Create output directory
 mkdir -p "$OUTPUT_DIR"
+
+# Create the pod YAML dynamically
+cat > "$TEMP_YAML" <<EOF
+apiVersion: v1
+kind: Pod
+metadata:
+  name: $POD_NAME
+spec:
+  restartPolicy: Never
+  containers:
+  - name: cuda
+    image: $GPU_IMAGE
+    command: ["nvidia-smi"]
+    resources:
+      limits:
+        nvidia.com/gpu: 1
+EOF
 
 # Clean up any existing pod
 echo -e "${YELLOW}Checking for existing pod...${NC}"
@@ -35,7 +55,7 @@ fi
 
 # Create the pod
 echo -e "${GREEN}Creating GPU test pod...${NC}"
-kubectl apply -f gpu-test.yaml -n "$NAMESPACE"
+kubectl apply -f "$TEMP_YAML" -n "$NAMESPACE"
 
 # Monitor pod status
 echo -e "${YELLOW}Monitoring pod status...${NC}"
@@ -209,6 +229,9 @@ fi
 
 echo ""
 echo -e "${GREEN}Done! Results saved in: $ARCHIVE_NAME${NC}"
+
+# Cleanup temp YAML file
+rm -f "$TEMP_YAML"
 
 # Exit with appropriate code
 if [ "$POD_STATUS" == "Succeeded" ]; then

@@ -14,7 +14,21 @@ This script creates a Kubernetes pod that requests a single GPU and runs the `nv
 
 ## Usage
 
-### Basic Usage
+### Quick Start (Run from URL)
+
+Customers can run this script directly without cloning the repository:
+
+```bash
+# Download and run
+curl -sSL https://raw.githubusercontent.com/YOUR_ORG/utilities/main/gpu_simple_test/start.sh | bash
+
+# Or download first, then run
+curl -sSL https://raw.githubusercontent.com/YOUR_ORG/utilities/main/gpu_simple_test/start.sh -o gpu-test.sh
+chmod +x gpu-test.sh
+./gpu-test.sh
+```
+
+### Local Usage
 
 ```bash
 ./start.sh
@@ -31,8 +45,11 @@ NAMESPACE=my-namespace ./start.sh
 # Set custom timeout (default: 300 seconds)
 TIMEOUT=600 ./start.sh
 
+# Use a different GPU image (default: nvidia/cuda:11.8.0-base-ubuntu22.04)
+GPU_IMAGE=nvidia/cuda:12.3.2-runtime-ubuntu22.04 ./start.sh
+
 # Combine options
-NAMESPACE=gpu-workloads TIMEOUT=120 ./start.sh
+NAMESPACE=gpu-workloads TIMEOUT=120 GPU_IMAGE=pytorch/pytorch:2.0.1-cuda11.7-cudnn8-runtime ./start.sh
 ```
 
 ## What It Does
@@ -117,9 +134,18 @@ If the pod fails to start or complete:
 4. Check for pod events indicating scheduling issues
 5. Ensure the namespace has access to GPU resources
 
+## Environment Variables
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `NAMESPACE` | `default` | Kubernetes namespace to use |
+| `TIMEOUT` | `300` | Timeout in seconds for pod completion |
+| `GPU_IMAGE` | `nvidia/cuda:11.8.0-base-ubuntu22.04` | Container image to use for GPU test |
+
 ## Files
 
-- `start.sh` - Main script that orchestrates the test
-- `gpu-test.yaml` - Pod definition with GPU request
+- `start.sh` - Self-contained script that includes the pod definition and orchestrates the test
 - `README.md` - This file
+
+**Note:** The script is completely self-contained and generates the pod YAML dynamically. No additional files are required.
 
