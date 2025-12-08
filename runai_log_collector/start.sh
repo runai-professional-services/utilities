@@ -131,7 +131,7 @@ echo "✓ All required tools are available"
 echo ""
 
 # Namespaces to check
-NAMESPACES=("runai-backend" "runai" "knative-serving" "knative-operator")
+NAMESPACES=("runai-backend" "runai" "knative-serving" "knative-operator" "runai-reservation")
 
 echo "Extracting cluster information..."
 CLUSTER_URL=$(k8s_cmd -n runai get runaiconfig runai -o jsonpath='{.spec.__internal.global.clusterURL}' 2>/dev/null)
@@ -341,6 +341,43 @@ for NAMESPACE in "${NAMESPACES[@]}"; do
       
       echo "Collecting namespace events..."
       k8s_cmd -n knative-operator get events --sort-by='.lastTimestamp' > "$LOG_DIR/events_knative-operator.txt" 2>/dev/null
+      echo "  ✓ Events saved"
+      
+    elif [ "$NAMESPACE" == "runai-reservation" ]; then
+      echo "Collecting pod list for runai-reservation namespace..."
+      k8s_cmd -n runai-reservation get pods -o wide > "$LOG_DIR/pod-list_runai-reservation.txt" 2>/dev/null
+      echo "  ✓ Pod list saved"
+      
+      echo "Collecting all ConfigMaps..."
+      k8s_cmd -n runai-reservation get cm -o yaml > "$LOG_DIR/configmaps_runai-reservation.yaml" 2>/dev/null
+      echo "  ✓ ConfigMaps saved"
+      
+      echo "Collecting all Secrets..."
+      k8s_cmd -n runai-reservation get secrets -o yaml > "$LOG_DIR/secrets_runai-reservation.yaml" 2>/dev/null
+      echo "  ✓ Secrets saved"
+      
+      echo "Collecting all Services..."
+      k8s_cmd -n runai-reservation get svc -o yaml > "$LOG_DIR/services_runai-reservation.yaml" 2>/dev/null
+      echo "  ✓ Services saved"
+      
+      echo "Collecting all Deployments..."
+      k8s_cmd -n runai-reservation get deployments -o yaml > "$LOG_DIR/deployments_runai-reservation.yaml" 2>/dev/null
+      echo "  ✓ Deployments saved"
+      
+      echo "Collecting all StatefulSets..."
+      k8s_cmd -n runai-reservation get statefulsets -o yaml > "$LOG_DIR/statefulsets_runai-reservation.yaml" 2>/dev/null
+      echo "  ✓ StatefulSets saved"
+      
+      echo "Collecting all DaemonSets..."
+      k8s_cmd -n runai-reservation get daemonsets -o yaml > "$LOG_DIR/daemonsets_runai-reservation.yaml" 2>/dev/null
+      echo "  ✓ DaemonSets saved"
+      
+      echo "Collecting all PersistentVolumeClaims..."
+      k8s_cmd -n runai-reservation get pvc -o yaml > "$LOG_DIR/pvcs_runai-reservation.yaml" 2>/dev/null
+      echo "  ✓ PersistentVolumeClaims saved"
+      
+      echo "Collecting namespace events..."
+      k8s_cmd -n runai-reservation get events --sort-by='.lastTimestamp' > "$LOG_DIR/events_runai-reservation.txt" 2>/dev/null
       echo "  ✓ Events saved"
     fi
 
