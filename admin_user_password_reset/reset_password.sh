@@ -21,42 +21,57 @@ print_info() {
     echo -e "${YELLOW}ℹ $1${NC}"
 }
 
+# Generate a random password that meets complexity requirements
+generate_password() {
+    local length=16
+    local lowercase='abcdefghijklmnopqrstuvwxyz'
+    local uppercase='ABCDEFGHIJKLMNOPQRSTUVWXYZ'
+    local digits='0123456789'
+    local special='!@#$%^&*-_=+'
+    
+    # Ensure at least one character from each required category
+    local password=""
+    password+="${lowercase:RANDOM%${#lowercase}:1}"
+    password+="${uppercase:RANDOM%${#uppercase}:1}"
+    password+="${digits:RANDOM%${#digits}:1}"
+    password+="${special:RANDOM%${#special}:1}"
+    
+    # Fill the rest with random characters from all categories
+    local all_chars="${lowercase}${uppercase}${digits}${special}"
+    for ((i=4; i<length; i++)); do
+        password+="${all_chars:RANDOM%${#all_chars}:1}"
+    done
+    
+    # Shuffle the password to randomize character positions
+    echo "$password" | fold -w1 | shuf | tr -d '\n'
+}
+
 # Usage function
 usage() {
-    echo "Usage: $0 --username <USERNAME> --password <NEW_PASSWORD> [--namespace <NAMESPACE>] [--url <RUNAI_URL>]"
+    echo "Usage: $0 [--username <USERNAME>] [--namespace <NAMESPACE>] [--url <RUNAI_URL>]"
     echo ""
     echo "Options:"
-    echo "  --username    Username to reset password for (e.g., admin@run.ai)"
-    echo "  --password    New password (must meet complexity requirements)"
+    echo "  --username    Username to reset password for (default: test@run.ai)"
     echo "  --namespace   Kubernetes namespace (default: runai-backend)"
     echo "  --url         Run:ai control plane URL (will try to auto-detect if not provided)"
     echo ""
-    echo "Password Requirements:"
-    echo "  - At least 8 characters long"
-    echo "  - At least 1 digit (0-9)"
-    echo "  - At least 1 lowercase letter (a-z)"
-    echo "  - At least 1 uppercase letter (A-Z)"
-    echo "  - At least 1 special character (!, @, #, $, etc.)"
+    echo "Note: A secure random password will be automatically generated and displayed after reset."
     echo ""
     echo "Example:"
-    echo "  $0 --username admin@run.ai --password 'MyNewPass123!'"
+    echo "  $0"
+    echo "  $0 --username test@run.ai"
     exit 1
 }
 
 # Parse arguments
 NAMESPACE="runai-backend"
-USERNAME=""
-NEW_PASSWORD=""
+USERNAME="test@run.ai"
 RUNAI_URL=""
 
 while [[ $# -gt 0 ]]; do
     case $1 in
         --username)
             USERNAME="$2"
-            shift 2
-            ;;
-        --password)
-            NEW_PASSWORD="$2"
             shift 2
             ;;
         --namespace)
@@ -77,37 +92,8 @@ while [[ $# -gt 0 ]]; do
     esac
 done
 
-# Validate required arguments
-if [ -z "$USERNAME" ] || [ -z "$NEW_PASSWORD" ]; then
-    print_error "Username and password are required"
-    usage
-fi
-
-# Validate password complexity
-if [[ ${#NEW_PASSWORD} -lt 8 ]]; then
-    print_error "Password must be at least 8 characters long"
-    exit 1
-fi
-
-if ! [[ "$NEW_PASSWORD" =~ [0-9] ]]; then
-    print_error "Password must contain at least 1 digit"
-    exit 1
-fi
-
-if ! [[ "$NEW_PASSWORD" =~ [a-z] ]]; then
-    print_error "Password must contain at least 1 lowercase letter"
-    exit 1
-fi
-
-if ! [[ "$NEW_PASSWORD" =~ [A-Z] ]]; then
-    print_error "Password must contain at least 1 uppercase letter"
-    exit 1
-fi
-
-if ! [[ "$NEW_PASSWORD" =~ [^a-zA-Z0-9] ]]; then
-    print_error "Password must contain at least 1 special character"
-    exit 1
-fi
+# Generate a secure random password
+NEW_PASSWORD=$(generate_password)
 
 echo "=========================================="
 echo "Run:ai Admin Password Reset Tool"
@@ -134,6 +120,7 @@ fi
 
 print_info "Target username: $USERNAME"
 print_info "Namespace: $NAMESPACE"
+print_info "Generating secure random password..."
 echo ""
 
 # Step 1: Get Keycloak admin credentials
@@ -242,8 +229,12 @@ echo "=========================================="
 print_success "Password reset completed successfully!"
 echo "=========================================="
 echo ""
-echo "You can now login to Run:ai with:"
+echo "Login Credentials:"
 echo "  Username: $USERNAME"
-echo "  Password: (the password you provided)"
+echo "  Password: $NEW_PASSWORD"
 echo ""
 echo "Run:ai URL: $RUNAI_URL"
+echo ""
+print_info "IMPORTANT: This is a randomly generated password."
+print_info "Please login and change it to a more personal password in the UI."
+print_info "Go to: User Settings → Change Password"

@@ -1,6 +1,6 @@
 # Run:ai Admin User Password Reset Tool
 
-This tool automates the process of resetting a Run:ai local admin user password via Keycloak when a user is locked out due to SSO auto-redirect issues or forgotten passwords.
+This tool automates the process of resetting a Run:ai local admin user password via Keycloak when a user is locked out due to SSO auto-redirect issues or forgotten passwords. The tool automatically generates a secure random password and displays it after the reset is complete.
 
 ## Use Case
 
@@ -21,15 +21,18 @@ This is particularly useful when:
 ### Basic Usage
 
 ```bash
-./reset_password.sh --username <USERNAME> --password <NEW_PASSWORD>
+# Reset password for default user (test@run.ai)
+./reset_password.sh
+
+# Reset password for a specific user
+./reset_password.sh --username <USERNAME>
 ```
 
 ### With All Options
 
 ```bash
 ./reset_password.sh \
-  --username admin@run.ai \
-  --password 'MyNewPass123!' \
+  --username test@run.ai \
   --namespace runai-backend \
   --url https://runai.example.com
 ```
@@ -38,41 +41,39 @@ This is particularly useful when:
 
 | Parameter | Required | Default | Description |
 |-----------|----------|---------|-------------|
-| `--username` | Yes | - | Username to reset password for (e.g., `admin@run.ai`) |
-| `--password` | Yes | - | New password (must meet complexity requirements) |
+| `--username` | No | `test@run.ai` | Username to reset password for (e.g., `test@run.ai`) |
 | `--namespace` | No | `runai-backend` | Kubernetes namespace where Run:ai is installed |
 | `--url` | No | Auto-detected | Run:ai control plane URL (e.g., `https://runai.example.com`) |
 
-## Password Requirements
+## Password Generation
 
-The new password must meet the following requirements:
-- At least 8 characters long
+The tool automatically generates a secure random password that meets the following requirements:
+- 16 characters long
 - At least 1 digit (0-9)
 - At least 1 lowercase letter (a-z)
 - At least 1 uppercase letter (A-Z)
 - At least 1 special character (!, @, #, $, etc.)
 
+The generated password is displayed at the end of the script. You should change it to a more personal password within the Run:ai UI after logging in.
+
 ## Examples
 
-### Example 1: Reset admin@run.ai password (auto-detect URL)
+### Example 1: Reset test@run.ai password (auto-detect URL)
 
 ```bash
-./reset_password.sh --username admin@run.ai --password 'SecurePass123!'
+./reset_password.sh
 ```
 
 ### Example 2: Reset with custom URL
 
 ```bash
-./reset_password.sh \
-  --username admin@run.ai \
-  --password 'SecurePass123!' \
-  --url https://runai-qa.cegedim.cloud
+./reset_password.sh --url https://runai-qa.cegedim.cloud
 ```
 
 ### Example 3: Reset for different user
 
 ```bash
-./reset_password.sh --username support@company.com --password 'NewPassword456#'
+./reset_password.sh --username support@company.com
 ```
 
 ## How It Works
@@ -100,8 +101,9 @@ Example output:
 Run:ai Admin Password Reset Tool
 ==========================================
 
-ℹ Target username: admin@run.ai
+ℹ Target username: test@run.ai
 ℹ Namespace: runai-backend
+ℹ Generating secure random password...
 
 ℹ Step 1: Retrieving Keycloak admin credentials from Kubernetes...
 ✓ Keycloak admin credentials retrieved
@@ -112,10 +114,10 @@ Run:ai Admin Password Reset Tool
 ℹ Step 3: Obtaining Keycloak admin token...
 ✓ Keycloak admin token obtained
 
-ℹ Step 4: Finding user 'admin@run.ai' in Keycloak...
+ℹ Step 4: Finding user 'test@run.ai' in Keycloak...
 ✓ User found (ID: c7053420-5e28-4af9-b571-e590f676d6c7)
 
-ℹ Step 5: Resetting password for user 'admin@run.ai'...
+ℹ Step 5: Resetting password for user 'test@run.ai'...
 ✓ Password reset successfully
 
 ℹ Step 6: Verifying new password by obtaining Run:ai API token...
@@ -125,11 +127,15 @@ Run:ai Admin Password Reset Tool
 ✓ Password reset completed successfully!
 ==========================================
 
-You can now login to Run:ai with:
-  Username: admin@run.ai
-  Password: (the password you provided)
+Login Credentials:
+  Username: test@run.ai
+  Password: Xy7@kLm3pQ9#vR2z
 
 Run:ai URL: https://runai.example.com
+
+ℹ IMPORTANT: This is a randomly generated password.
+ℹ Please login and change it to a more personal password in the UI.
+ℹ Go to: User Settings → Change Password
 ```
 
 ## Troubleshooting
@@ -146,8 +152,8 @@ Install jq: `brew install jq` (macOS) or `apt-get install jq` (Ubuntu/Debian)
 - Check that the secret `runai-backend-keycloakx` exists
 
 ### Error: "User not found in Keycloak"
-- Verify the username is correct
-- The username should be the full email address (e.g., `admin@run.ai`)
+- Verify the username is correct (default is `test@run.ai`)
+- The username should be the full email address format
 - Check that the user exists in the Run:ai realm in Keycloak
 
 ### Error: "Failed to verify new password"
@@ -160,10 +166,10 @@ Install jq: `brew install jq` (macOS) or `apt-get install jq` (Ubuntu/Debian)
 After resetting the password, if you need to disable SSO auto-redirect, you can use the reset admin credentials:
 
 ```bash
-# Get a Run:ai API token
+# Get a Run:ai API token (use the generated password from the script output)
 RUNAI_TOKEN=$(curl -s -X POST "https://runai.example.com/api/v1/token" \
   -H "Content-Type: application/json" \
-  -d '{"grantType":"password","clientID":"cli","username":"admin@run.ai","password":"YourNewPassword"}' \
+  -d '{"grantType":"password","clientID":"cli","username":"test@run.ai","password":"<GENERATED_PASSWORD>"}' \
   | jq -r .accessToken)
 
 # Disable SSO auto-redirect (replace 'oidc' with your IDP type: oidc, saml, or openshift-v4)
@@ -177,9 +183,9 @@ curl "https://runai.example.com/api/v1/security/settings/autoRedirectSSO" \
 ## Security Notes
 
 - This tool requires cluster admin access to retrieve Keycloak credentials
-- Passwords are passed as command-line arguments (not logged but visible in process list)
-- Use single quotes around passwords to avoid shell interpretation of special characters
-- Always use strong passwords that meet the complexity requirements
+- A secure random password is automatically generated for each reset
+- The generated password is displayed only once in the terminal output
+- After logging in, change the password to something more memorable in the Run:ai UI (User Settings → Change Password)
 
 ## Support
 
