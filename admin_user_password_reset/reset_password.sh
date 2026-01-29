@@ -42,8 +42,20 @@ generate_password() {
         password+="${all_chars:RANDOM%${#all_chars}:1}"
     done
     
-    # Shuffle the password to randomize character positions
-    echo "$password" | fold -w1 | shuf | tr -d '\n'
+    # Shuffle the password using a portable method (Fisher-Yates shuffle)
+    local pass_array=()
+    for ((i=0; i<${#password}; i++)); do
+        pass_array+=("${password:i:1}")
+    done
+    
+    for ((i=${#pass_array[@]}-1; i>0; i--)); do
+        local j=$((RANDOM % (i+1)))
+        local temp="${pass_array[i]}"
+        pass_array[i]="${pass_array[j]}"
+        pass_array[j]="$temp"
+    done
+    
+    printf "%s" "${pass_array[@]}"
 }
 
 # Usage function
