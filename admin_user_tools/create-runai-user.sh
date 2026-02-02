@@ -2,46 +2,94 @@
 
 set -e
 
-# Configuration
-USER_EMAIL="${1}"
-USER_PASSWORD="${2:-TempPassword123!}"
-REALM="${3:-runai}"
-RESET_PASSWORD="${4:-true}"
-GRANT_ADMIN="${5:-true}"
-
 # Colors for output
 RED='\033[0;31m'
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 NC='\033[0m' # No Color
 
+# Function to generate a secure random password
+generate_password() {
+    # Generate password with at least 1 digit, 1 lowercase, 1 uppercase, 1 special char
+    local password=""
+    local length=16
+    
+    # Define character sets
+    local digits="0123456789"
+    local lowercase="abcdefghijklmnopqrstuvwxyz"
+    local uppercase="ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+    local special="!@#$%^&*()-_=+[]{}|;:,.<>?"
+    local all="${digits}${lowercase}${uppercase}${special}"
+    
+    # Ensure at least one character from each set
+    password+="${digits:RANDOM % ${#digits}:1}"
+    password+="${lowercase:RANDOM % ${#lowercase}:1}"
+    password+="${uppercase:RANDOM % ${#uppercase}:1}"
+    password+="${special:RANDOM % ${#special}:1}"
+    
+    # Fill the rest with random characters
+    for ((i=4; i<length; i++)); do
+        password+="${all:RANDOM % ${#all}:1}"
+    done
+    
+    # Shuffle the password
+    echo "$password" | fold -w1 | shuf | tr -d '\n'
+}
+
+# Function to generate a random email
+generate_email() {
+    local random_string=$(cat /dev/urandom | LC_ALL=C tr -dc 'a-z0-9' | fold -w 8 | head -n 1)
+    local timestamp=$(date +%s)
+    echo "user-${random_string}-${timestamp}@runai.local"
+}
+
+# Configuration
+USER_EMAIL="${1}"
+USER_PASSWORD="${2}"
+REALM="${3:-runai}"
+RESET_PASSWORD="${4:-true}"
+GRANT_ADMIN="${5:-true}"
+
+# Generate random email if not provided
+EMAIL_GENERATED=false
+if [ -z "$USER_EMAIL" ]; then
+    USER_EMAIL=$(generate_email)
+    EMAIL_GENERATED=true
+    echo -e "${YELLOW}ℹ No email provided - generated random email: $USER_EMAIL${NC}"
+    echo ""
+fi
+
+# Generate random password if not provided
+PASSWORD_GENERATED=false
+if [ -z "$USER_PASSWORD" ]; then
+    USER_PASSWORD=$(generate_password)
+    PASSWORD_GENERATED=true
+    echo -e "${YELLOW}ℹ No password provided - generated secure random password${NC}"
+    echo ""
+fi
+
 # Usage function
 usage() {
-    echo "Usage: $0 <user_email> [password] [realm] [reset_password] [grant_admin]"
+    echo "Usage: $0 [user_email] [password] [realm] [reset_password] [grant_admin]"
     echo ""
     echo "Arguments:"
-    echo "  user_email       Required. Email address for the new user"
-    echo "  password         Optional. User password (default: TempPassword123!)"
+    echo "  user_email       Optional. Email address for the new user (default: auto-generated)"
+    echo "  password         Optional. User password (default: auto-generated)"
     echo "  realm            Optional. Keycloak realm / tenant name (default: runai)"
     echo "  reset_password   Optional. Force password reset on first login (default: true)"
     echo "  grant_admin      Optional. Grant System Administrator role (default: true)"
     echo ""
     echo "Examples:"
-    echo "  $0 newuser@example.com"
-    echo "  $0 newuser@example.com MyPassword123"
-    echo "  $0 newuser@example.com MyPassword123 runai false true"
+    echo "  $0                              # Generate random email and password"
+    echo "  $0 newuser@example.com          # Specify email, generate password"
+    echo "  $0 newuser@example.com MyPass123  # Specify both email and password"
+    echo "  $0 user@example.com MyPass123 runai false true  # Full options"
     exit 1
 }
 
-# Check if email is provided
-if [ -z "$USER_EMAIL" ]; then
-    echo -e "${RED}Error: User email is required${NC}"
-    usage
-fi
-
 # Validate email format
 if ! echo "$USER_EMAIL" | grep -qE '^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$'; then
-    echo -e "${RED}Error: Invalid email format${NC}"
+    echo -e "${RED}Error: Invalid email format: $USER_EMAIL${NC}"
     exit 1
 fi
 
@@ -50,8 +98,16 @@ echo -e "${GREEN}Run:AI User Creation Script${NC}"
 echo -e "${GREEN}========================================${NC}"
 echo ""
 echo "Configuration:"
-echo "  Email:          $USER_EMAIL"
-echo "  Password:       ${USER_PASSWORD:0:3}****"
+if [ "$EMAIL_GENERATED" = true ]; then
+    echo "  Email:          $USER_EMAIL (auto-generated)"
+else
+    echo "  Email:          $USER_EMAIL"
+fi
+if [ "$PASSWORD_GENERATED" = true ]; then
+    echo "  Password:       ${USER_PASSWORD:0:3}**** (auto-generated)"
+else
+    echo "  Password:       ${USER_PASSWORD:0:3}****"
+fi
 echo "  Realm:          $REALM"
 echo "  Reset Password: $RESET_PASSWORD"
 echo "  Grant Admin:    $GRANT_ADMIN"
@@ -247,7 +303,19 @@ if [ "$GRANT_ADMIN" = "true" ]; then
     echo "  Tenant ID:          $TENANT_ID"
 fi
 echo ""
-if [ "$RESET_PASSWORD" = "true" ]; then
+if [ "$EMAIL_GENERATED" = true ] || [ "$PASSWORD_GENERATED" = true ]; then
+    echo -e "${YELLOW}Important:${NC}"
+    if [ "$EMAIL_GENERATED" = true ]; then
+        echo "  • Email was auto-generated - save these credentials!"
+    fi
+    if [ "$PASSWORD_GENERATED" = true ]; then
+        echo "  • Password was auto-generated - save it securely!"
+    fi
+    if [ "$RESET_PASSWORD" = "true" ]; then
+        echo "  • User will be prompted to change password on first login"
+    fi
+    echo ""
+elif [ "$RESET_PASSWORD" = "true" ]; then
     echo -e "${YELLOW}Important:${NC}"
     echo "  • The user will be prompted to change their password on first login"
     echo ""

@@ -9,10 +9,16 @@ This directory contains three tools for managing Run:ai users:
 ## Quick Start - Create New User
 
 ```bash
+# Create a user with auto-generated email and password
+./create-runai-user.sh
+
 # Create a new user with System administrator permissions (auto-detects tenant)
 ./create-runai-user.sh newuser@example.com
 
-# Create user with custom password
+# Create user with custom password (email specified, password auto-generated)
+./create-runai-user.sh newuser@example.com
+
+# Create user with both email and password specified
 ./create-runai-user.sh newuser@example.com MySecurePass123!
 
 # Create user without admin permissions
@@ -40,13 +46,16 @@ If you're locked out due to SSO auto-redirect:
 
 This tool automates the process of creating new Run:ai local users via the internal APIs, mimicking the exact same flow as the Run:ai UI. It creates users in Keycloak and optionally grants them System administrator permissions scoped to the entire tenant.
 
-## Use Case
+## Use Cases
 
 This tool is useful when:
 - You need to create local admin users without accessing the UI
 - You want to automate user provisioning via kubectl
 - You need to quickly create users with System administrator permissions
 - You want to bootstrap admin access to a new Run:ai installation
+- **Testing/Demo environments**: Auto-generate disposable users with random credentials
+- **Automated provisioning**: Integrate into scripts where credentials can be auto-generated and stored
+- **Quick user creation**: No need to think of email/password combinations for temporary users
 
 ## Prerequisites
 
@@ -60,10 +69,13 @@ This tool is useful when:
 ### Basic Usage
 
 ```bash
-# Create user with auto-detected tenant and System administrator permissions
+# Create user with auto-generated email and password
+./create-runai-user.sh
+
+# Create user with specified email (password auto-generated)
 ./create-runai-user.sh newuser@example.com
 
-# Create user with custom password
+# Create user with both email and password specified
 ./create-runai-user.sh newuser@example.com MySecurePass123!
 ```
 
@@ -71,28 +83,46 @@ This tool is useful when:
 
 ```bash
 # Full syntax
-./create-runai-user.sh <email> [password] [realm] [reset_password] [grant_admin]
+./create-runai-user.sh [email] [password] [realm] [reset_password] [grant_admin]
 
 # Create user without admin permissions
 ./create-runai-user.sh user@example.com MyPass123 runai false false
 
 # Create user with temporary password (requires reset on first login)
 ./create-runai-user.sh user@example.com TempPass123 runai true true
+
+# Auto-generate everything for testing
+./create-runai-user.sh
 ```
 
 ## Parameters
 
 | Parameter | Required | Default | Description |
 |-----------|----------|---------|-------------|
-| `email` | Yes | - | Email address for the new user |
-| `password` | No | `TempPassword123!` | User password |
+| `email` | No | Auto-generated | Email address for the new user (format: `user-<random>-<timestamp>@runai.local`) |
+| `password` | No | Auto-generated | User password (16 chars with mixed case, digits, special chars) |
 | `realm` | No | `runai` | Keycloak realm / tenant name |
 | `reset_password` | No | `true` | Force password reset on first login |
 | `grant_admin` | No | `true` | Grant System Administrator role at tenant scope |
 
 ## Examples
 
-### Example 1: Create admin user (simplest)
+### Example 1: Auto-generate everything (testing/demo)
+
+```bash
+./create-runai-user.sh
+```
+
+This will:
+- Auto-generate a random email like `user-a8f3k9d2-1738518400@runai.local`
+- Auto-generate a secure 16-character password
+- Grant System Administrator permissions (tenant-wide)
+- Auto-detect the tenant ID from the realm
+- Display the generated credentials in the output
+
+**Use case:** Quick testing, demo environments, or automated provisioning
+
+### Example 2: Specify email, auto-generate password
 
 ```bash
 ./create-runai-user.sh admin@company.com
@@ -100,18 +130,18 @@ This tool is useful when:
 
 This will:
 - Create user with email `admin@company.com`
-- Set temporary password `TempPassword123!`
+- Auto-generate a secure random password
 - Require password reset on first login
 - Grant System Administrator permissions (tenant-wide)
 - Auto-detect the tenant ID from the realm
 
-### Example 2: Create user with custom password
+### Example 3: Create user with custom password
 
 ```bash
 ./create-runai-user.sh user@example.com "MySecurePass#123"
 ```
 
-### Example 3: Create user without admin permissions
+### Example 4: Create user without admin permissions
 
 ```bash
 ./create-runai-user.sh viewer@example.com ViewPass123 runai false false
@@ -121,16 +151,93 @@ This will:
 
 The script performs the following steps:
 
-1. **Auto-detects Tenant ID**: Queries the `/internal/api/v1/tenants` API to find the tenant ID for the specified realm
-2. **Creates User in Keycloak**: Calls `/internal/users` API to create the user with the specified email, password, and realm
-3. **Grants System Administrator** (if enabled): Calls `/internal/authorization/access-rules` API to create an access rule granting System administrator role at tenant scope
-4. **Verifies Permissions**: Queries `/internal/authorization/subject-access-rules` to confirm the permissions were created successfully
+1. **Generates Credentials** (if not provided): 
+   - Auto-generates random email in format `user-<random>-<timestamp>@runai.local`
+   - Auto-generates secure 16-character password with mixed case, digits, and special characters
+2. **Auto-detects Tenant ID**: Queries the `/internal/api/v1/tenants` API to find the tenant ID for the specified realm
+3. **Creates User in Keycloak**: Calls `/internal/users` API to create the user with the email, password, and realm
+4. **Grants System Administrator** (if enabled): Calls `/internal/authorization/access-rules` API to create an access rule granting System administrator role at tenant scope
+5. **Verifies Permissions**: Queries `/internal/authorization/subject-access-rules` to confirm the permissions were created successfully
 
 All steps use **internal APIs** that don't require authentication when called from within the cluster via `kubectl exec`.
 
 ## Output
 
-### Example Output (Successful Creation)
+### Example Output (Auto-Generated Credentials)
+
+```
+ℹ No email provided - generated random email: user-k7m9p4x2-1738518400@runai.local
+
+ℹ No password provided - generated secure random password
+
+========================================
+Run:AI User Creation Script
+========================================
+
+Configuration:
+  Email:          user-k7m9p4x2-1738518400@runai.local (auto-generated)
+  Password:       7Kp**** (auto-generated)
+  Realm:          runai
+  Reset Password: true
+  Grant Admin:    true
+
+Testing cluster connectivity...
+✓ Cluster connectivity OK
+
+Finding required pods...
+✓ Identity-manager pod: identity-manager-abc123
+✓ Authorization pod: authorization-xyz789
+✓ Tenants-manager pod: tenants-manager-def456
+
+Auto-detecting tenant ID from realm 'runai'...
+✓ Tenant ID detected: 1004
+
+========================================
+Creating User
+========================================
+Response: {"id":"a1b2c3d4-e5f6-7890-abcd-ef1234567890"}
+
+✓ User created successfully in Keycloak
+
+========================================
+Step 2: Granting System Administrator Access
+========================================
+Response: {"id":15}
+
+✓ Access rule creation API returned success
+
+Verifying permissions...
+User's access rules:
+  - Role: System administrator, Scope: tenant (runai)
+
+✓ System Administrator permissions created!
+
+The user now has tenant-wide System Administrator access for:
+  - Run:AI UI
+  - Run:AI API
+  - CLI operations
+
+========================================
+✓ User Created Successfully!
+========================================
+
+User Details:
+  Email:              user-k7m9p4x2-1738518400@runai.local
+  Password:           7Kp#mN9@xR2&qL5
+  Realm:              runai
+  Reset Password:     true
+  Role:               System Administrator (Tenant-wide)
+  Tenant ID:          1004
+
+Important:
+  • Email was auto-generated - save these credentials!
+  • Password was auto-generated - save it securely!
+  • User will be prompted to change password on first login
+
+User can now login to Run:AI!
+```
+
+### Example Output (Specified Email)
 
 ```
 ========================================
@@ -227,9 +334,12 @@ User can now login to Run:AI!
 ## Security Notes
 
 - This tool requires cluster admin access to execute commands in pods
+- **Auto-generated credentials** are displayed in the output - save them immediately as they won't be shown again
 - Passwords are displayed in the output - use secure channels when sharing credentials
+- Auto-generated passwords are cryptographically secure (16 chars with mixed case, digits, special chars)
 - Users created with `reset_password: true` (default) must change their password on first login
 - System Administrator role grants full access to all Run:ai features at the tenant level
+- Auto-generated emails use the format `user-<random>-<timestamp>@runai.local` for easy identification
 
 ## What This Tool Creates
 
