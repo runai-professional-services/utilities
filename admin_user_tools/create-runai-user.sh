@@ -11,29 +11,50 @@ NC='\033[0m' # No Color
 # Function to generate a secure random password
 generate_password() {
     # Generate password with at least 1 digit, 1 lowercase, 1 uppercase, 1 special char
-    local password=""
     local length=16
     
     # Define character sets
     local digits="0123456789"
     local lowercase="abcdefghijklmnopqrstuvwxyz"
     local uppercase="ABCDEFGHIJKLMNOPQRSTUVWXYZ"
-    local special="!@#$%^&*()-_=+[]{}|;:,.<>?"
+    local special="!@#$%^&*()-_=+"
     local all="${digits}${lowercase}${uppercase}${special}"
     
-    # Ensure at least one character from each set
+    # Build password character by character for better randomness
+    local password=""
+    
+    # Add required characters first
     password+="${digits:RANDOM % ${#digits}:1}"
     password+="${lowercase:RANDOM % ${#lowercase}:1}"
     password+="${uppercase:RANDOM % ${#uppercase}:1}"
     password+="${special:RANDOM % ${#special}:1}"
     
-    # Fill the rest with random characters
+    # Fill the rest with random characters from all sets
     for ((i=4; i<length; i++)); do
         password+="${all:RANDOM % ${#all}:1}"
     done
     
-    # Shuffle the password
-    echo "$password" | fold -w1 | shuf | tr -d '\n'
+    # Simple shuffle using bash arrays (portable, no external commands needed)
+    local chars=()
+    for ((i=0; i<${#password}; i++)); do
+        chars[$i]="${password:$i:1}"
+    done
+    
+    # Fisher-Yates shuffle
+    for ((i=${#chars[@]}-1; i>0; i--)); do
+        local j=$((RANDOM % (i+1)))
+        local temp="${chars[$i]}"
+        chars[$i]="${chars[$j]}"
+        chars[$j]="$temp"
+    done
+    
+    # Reconstruct password
+    local shuffled=""
+    for char in "${chars[@]}"; do
+        shuffled+="$char"
+    done
+    
+    echo "$shuffled"
 }
 
 # Function to generate a random email
