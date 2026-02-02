@@ -1,9 +1,23 @@
-# Run:ai Admin User Password Reset Tools
+# Run:ai Admin User Tools
 
-This directory contains two tools to help recover from SSO lockout scenarios:
+This directory contains three tools for managing Run:ai users:
 
-1. **`reset_password.sh`** - Resets a local user's password via Keycloak
-2. **`grant_sysadmin_permission.sh`** - Grants System administrator permissions to a user
+1. **`create-runai-user.sh`** - Creates new local users with optional System administrator permissions
+2. **`reset_password.sh`** - Resets a local user's password via Keycloak
+3. **`grant_sysadmin_permission.sh`** - Grants System administrator permissions to a user
+
+## Quick Start - Create New User
+
+```bash
+# Create a new user with System administrator permissions (auto-detects tenant)
+./create-runai-user.sh newuser@example.com
+
+# Create user with custom password
+./create-runai-user.sh newuser@example.com MySecurePass123!
+
+# Create user without admin permissions
+./create-runai-user.sh newuser@example.com MyPass123 runai false false
+```
 
 ## Quick Start - SSO Lockout Recovery
 
@@ -19,6 +33,226 @@ If you're locked out due to SSO auto-redirect:
 
 # Step 3: Disable SSO auto-redirect (see examples below)
 ```
+
+---
+
+# User Creation Tool (`create-runai-user.sh`)
+
+This tool automates the process of creating new Run:ai local users via the internal APIs, mimicking the exact same flow as the Run:ai UI. It creates users in Keycloak and optionally grants them System administrator permissions scoped to the entire tenant.
+
+## Use Case
+
+This tool is useful when:
+- You need to create local admin users without accessing the UI
+- You want to automate user provisioning via kubectl
+- You need to quickly create users with System administrator permissions
+- You want to bootstrap admin access to a new Run:ai installation
+
+## Prerequisites
+
+- `kubectl` access to the Run:ai Kubernetes cluster
+- `jq` command-line JSON processor
+- `curl` command-line tool (available in the identity-manager pod)
+- Proper KUBECONFIG set to access the cluster
+
+## Usage
+
+### Basic Usage
+
+```bash
+# Create user with auto-detected tenant and System administrator permissions
+./create-runai-user.sh newuser@example.com
+
+# Create user with custom password
+./create-runai-user.sh newuser@example.com MySecurePass123!
+```
+
+### Advanced Options
+
+```bash
+# Full syntax
+./create-runai-user.sh <email> [password] [realm] [reset_password] [grant_admin]
+
+# Create user without admin permissions
+./create-runai-user.sh user@example.com MyPass123 runai false false
+
+# Create user with temporary password (requires reset on first login)
+./create-runai-user.sh user@example.com TempPass123 runai true true
+```
+
+## Parameters
+
+| Parameter | Required | Default | Description |
+|-----------|----------|---------|-------------|
+| `email` | Yes | - | Email address for the new user |
+| `password` | No | `TempPassword123!` | User password |
+| `realm` | No | `runai` | Keycloak realm / tenant name |
+| `reset_password` | No | `true` | Force password reset on first login |
+| `grant_admin` | No | `true` | Grant System Administrator role at tenant scope |
+
+## Examples
+
+### Example 1: Create admin user (simplest)
+
+```bash
+./create-runai-user.sh admin@company.com
+```
+
+This will:
+- Create user with email `admin@company.com`
+- Set temporary password `TempPassword123!`
+- Require password reset on first login
+- Grant System Administrator permissions (tenant-wide)
+- Auto-detect the tenant ID from the realm
+
+### Example 2: Create user with custom password
+
+```bash
+./create-runai-user.sh user@example.com "MySecurePass#123"
+```
+
+### Example 3: Create user without admin permissions
+
+```bash
+./create-runai-user.sh viewer@example.com ViewPass123 runai false false
+```
+
+## How It Works
+
+The script performs the following steps:
+
+1. **Auto-detects Tenant ID**: Queries the `/internal/api/v1/tenants` API to find the tenant ID for the specified realm
+2. **Creates User in Keycloak**: Calls `/internal/users` API to create the user with the specified email, password, and realm
+3. **Grants System Administrator** (if enabled): Calls `/internal/authorization/access-rules` API to create an access rule granting System administrator role at tenant scope
+4. **Verifies Permissions**: Queries `/internal/authorization/subject-access-rules` to confirm the permissions were created successfully
+
+All steps use **internal APIs** that don't require authentication when called from within the cluster via `kubectl exec`.
+
+## Output
+
+### Example Output (Successful Creation)
+
+```
+========================================
+Run:AI User Creation Script
+========================================
+
+Configuration:
+  Email:          admin@company.com
+  Password:       Tem****
+  Realm:          runai
+  Reset Password: true
+  Grant Admin:    true
+
+Testing cluster connectivity...
+✓ Cluster connectivity OK
+
+Finding required pods...
+✓ Identity-manager pod: identity-manager-abc123
+✓ Authorization pod: authorization-xyz789
+✓ Tenants-manager pod: tenants-manager-def456
+
+Auto-detecting tenant ID from realm 'runai'...
+✓ Tenant ID detected: 1004
+
+========================================
+Creating User
+========================================
+Response: {"id":"a1b2c3d4-e5f6-7890-abcd-ef1234567890"}
+
+✓ User created successfully in Keycloak
+
+========================================
+Step 2: Granting System Administrator Access
+========================================
+Response: {"id":15}
+
+✓ Access rule creation API returned success
+
+Verifying permissions...
+User's access rules:
+  - Role: System administrator, Scope: tenant (runai)
+
+✓ System Administrator permissions created!
+
+The user now has tenant-wide System Administrator access for:
+  - Run:AI UI
+  - Run:AI API
+  - CLI operations
+
+========================================
+✓ User Created Successfully!
+========================================
+
+User Details:
+  Email:              admin@company.com
+  Password:           TempPassword123!
+  Realm:              runai
+  Reset Password:     true
+  Role:               System Administrator (Tenant-wide)
+  Tenant ID:          1004
+
+Important:
+  • The user will be prompted to change their password on first login
+
+User can now login to Run:AI!
+```
+
+## Troubleshooting
+
+### Error: "Cannot connect to cluster or namespace runai-backend does not exist"
+- Ensure you have kubectl access to the cluster
+- Verify your KUBECONFIG is set correctly
+- Check that Run:ai is installed in the `runai-backend` namespace
+
+### Error: "Identity-manager pod not found"
+- Verify Run:ai is properly installed
+- Check that the control plane components are running: `kubectl get pods -n runai-backend`
+
+### Error: "Could not auto-detect tenant ID"
+- Verify the realm name is correct (default: `runai`)
+- Check that the tenants-manager service is running
+- Manually check tenants: `kubectl exec -n runai-backend <tenants-pod> -- curl -s http://localhost:8080/internal/api/v1/tenants`
+
+### Error: "User already exists in Keycloak"
+- The user email is already registered
+- Use the `reset_password.sh` tool to reset the existing user's password
+- Use the `grant_sysadmin_permission.sh` tool to grant admin permissions if needed
+
+### Warning: "Access rule creation failed"
+- The user was created but permissions were not granted
+- Use the `grant_sysadmin_permission.sh` tool to manually grant admin permissions
+- Check that the authorization service is running properly
+
+## Security Notes
+
+- This tool requires cluster admin access to execute commands in pods
+- Passwords are displayed in the output - use secure channels when sharing credentials
+- Users created with `reset_password: true` (default) must change their password on first login
+- System Administrator role grants full access to all Run:ai features at the tenant level
+
+## What This Tool Creates
+
+The tool mimics the exact same flow as the Run:ai UI and creates:
+
+1. **User in Keycloak** (identity/authentication layer)
+   - Email/username
+   - Password (temporary or permanent)
+   - Enabled status
+
+2. **Access Rule in Authorization Database** (permissions layer)
+   - Subject: user email
+   - Role: System administrator (roleId: 1)
+   - Scope: tenant-wide (scopeType: tenant, scopeId: auto-detected)
+   - Automatically syncs to cluster via Run:ai controllers
+
+The user will have full access to:
+- ✅ Run:AI UI - all features and settings
+- ✅ Run:AI API - full API access
+- ✅ CLI operations - runai CLI with admin privileges
+- ✅ Workload management - create, modify, delete workloads
+- ✅ User management - create users, manage access rules
+- ✅ Security settings - configure SSO, authentication, etc.
 
 ---
 
