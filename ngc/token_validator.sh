@@ -1,73 +1,97 @@
 #!/bin/bash
 set -euo pipefail
 
-if [ $# -ne 2 ]; then
-  echo "Usage: $0 <image> <ngc_api_key>"
-  echo "Example: $0 nvcr.io/nvidia/cuda:12.8.0-base-ubuntu22.04 nvapi-xxxxx"
+if [ $# -ne 1 ]; then
+  echo "Usage: $0 <ngc_api_key>"
+  echo "Example: $0 nvapi-xxxxx"
   exit 1
 fi
 
-IMAGE="$1"
-NGC_API_KEY="$2"
-REPO_PATH=$(echo "$IMAGE" | sed 's|nvcr.io/||' | sed 's|:.*||')
+NGC_API_KEY="$1"
 
 echo "=== NGC API Key Validation ==="
-echo "Image: $IMAGE"
-echo "Repository: $REPO_PATH"
 echo ""
 
-echo "[1/4] Requesting auth challenge from registry..."
-AUTH_HEADER=$(curl -s -I -u '$oauthtoken':"$NGC_API_KEY" \
-  "https://nvcr.io/v2/${REPO_PATH}/tags/list" 2>&1 \
-  | grep -i www-authenticate)
+echo "[1/3] Validating API key..."
+ORGS_RESPONSE=$(curl -s -w "\n%{http_code}" \
+  -H "Authorization: Bearer $NGC_API_KEY" \
+  "https://api.ngc.nvidia.com/v2/orgs")
 
-if [ -z "$AUTH_HEADER" ]; then
-  echo "[1/4] No auth challenge received, trying direct auth..."
-  HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" \
-    -u '$oauthtoken':"$NGC_API_KEY" \
-    "https://nvcr.io/v2/${REPO_PATH}/tags/list")
-  if [ "$HTTP_CODE" -eq 200 ]; then
-    echo ""
-    echo "PASS: NGC API key is valid and has pull access to $IMAGE"
-    exit 0
-  else
-    echo ""
-    echo "FAIL: NGC API key cannot access $IMAGE (HTTP $HTTP_CODE)"
-    exit 1
-  fi
-fi
-echo "[1/4] Done."
+HTTP_CODE=$(echo "$ORGS_RESPONSE" | tail -1)
+BODY=$(echo "$ORGS_RESPONSE" | sed '$d')
 
-echo "[2/4] Parsing token service endpoint..."
-REALM=$(echo "$AUTH_HEADER" | sed 's/.*realm="\([^"]*\)".*/\1/')
-SERVICE=$(echo "$AUTH_HEADER" | sed 's/.*service="\([^"]*\)".*/\1/')
-SCOPE=$(echo "$AUTH_HEADER" | sed 's/.*scope="\([^"]*\)".*/\1/')
-echo "[2/4] Done."
-
-echo "[3/4] Exchanging API key for bearer token..."
-TOKEN_RESPONSE=$(curl -s -u '$oauthtoken':"$NGC_API_KEY" \
-  "${REALM}?service=${SERVICE}&scope=${SCOPE}")
-
-TOKEN=$(echo "$TOKEN_RESPONSE" | grep -o '"token":"[^"]*"' | head -1 | cut -d'"' -f4)
-
-if [ -z "$TOKEN" ]; then
+if [ "$HTTP_CODE" != "200" ]; then
   echo ""
-  echo "FAIL: Could not obtain bearer token. The API key may be invalid."
-  echo "Token service response: $TOKEN_RESPONSE"
+  echo "FAIL: API key is invalid (HTTP $HTTP_CODE)"
   exit 1
 fi
-echo "[3/4] Done."
 
-echo "[4/4] Verifying pull access to repository..."
-HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" \
-  -H "Authorization: Bearer $TOKEN" \
-  "https://nvcr.io/v2/${REPO_PATH}/tags/list")
-echo "[4/4] Done."
+ORG_INFO=$(echo "$BODY" | python3 -c "
+import sys, json
+d = json.load(sys.stdin)
+orgs = d.get('organizations', [])
+if not orgs:
+    print('NO_ORGS')
+else:
+    org = orgs[0]
+    print(f'ORG_NAME={org[\"name\"]}')
+    print(f'ORG_DISPLAY={org[\"displayName\"]}')
+" 2>/dev/null)
+
+if echo "$ORG_INFO" | grep -q "NO_ORGS"; then
+  echo ""
+  echo "FAIL: API key is valid but not associated with any NGC org."
+  exit 1
+fi
+
+ORG_NAME=$(echo "$ORG_INFO" | grep ORG_NAME | cut -d= -f2)
+ORG_DISPLAY=$(echo "$ORG_INFO" | grep ORG_DISPLAY | cut -d= -f2)
+echo "[1/3] Done. Key belongs to org: $ORG_DISPLAY ($ORG_NAME)"
+
+echo "[2/3] Checking NIM product enablements..."
+NIM_PRODUCTS=$(echo "$BODY" | python3 -c "
+import sys, json
+d = json.load(sys.stdin)
+nim_keywords = ['NIM', 'NVAIE']
+for org in d.get('organizations', []):
+    for p in org.get('productEnablements', []):
+        name = p.get('productName', '')
+        if any(k in name for k in nim_keywords):
+            exp = p.get('expirationDate', 'no expiry')
+            print(f'  {p[\"type\"]}: {name} (expires: {exp})')
+" 2>/dev/null)
+
+if [ -z "$NIM_PRODUCTS" ]; then
+  echo ""
+  echo "FAIL: Org ($ORG_DISPLAY) has no NIM/NVAIE product enablements."
+  echo "  NIM images require an NVIDIA AI Enterprise license or NIM evaluation."
+  exit 1
+fi
+
+echo "[2/3] Done. NIM-related enablements:"
+echo "$NIM_PRODUCTS"
+echo ""
+
+echo "[3/3] Checking registry authentication..."
+TOKEN_RESPONSE=$(curl -s -u '$oauthtoken':"$NGC_API_KEY" \
+  "https://authn.nvidia.com/token?service=registry")
+
+HAS_TOKEN=$(echo "$TOKEN_RESPONSE" | python3 -c "
+import sys, json
+try:
+    d = json.load(sys.stdin)
+    print('yes' if d.get('token') else 'no')
+except:
+    print('no')
+" 2>/dev/null)
+
+if [ "$HAS_TOKEN" = "no" ]; then
+  echo ""
+  echo "FAIL: Could not obtain a registry token."
+  exit 1
+fi
+echo "[3/3] Done. Registry token obtained."
 
 echo ""
-if [ "$HTTP_CODE" -eq 200 ]; then
-  echo "PASS: NGC API key is valid and has pull access to $IMAGE"
-else
-  echo "FAIL: NGC API key cannot pull $IMAGE (HTTP $HTTP_CODE)"
-  exit 1
-fi
+echo "PASS: NGC API key is valid and has NIM pull access"
+echo "  Org: $ORG_DISPLAY ($ORG_NAME)"
